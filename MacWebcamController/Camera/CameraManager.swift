@@ -116,7 +116,16 @@ final class CameraManager {
     }
 
     nonisolated private static func extractVendorProduct(from modelID: String) -> (UInt16, UInt16) {
-        // "VID_XXXX&PID_XXXX" format
+        // Format: "UVC Camera VendorID_21325 ProductID_8457" (decimal)
+        if let vidRange = modelID.range(of: "VendorID_"),
+           let pidRange = modelID.range(of: "ProductID_") {
+            let vidStr = String(modelID[vidRange.upperBound...].prefix(while: \.isNumber))
+            let pidStr = String(modelID[pidRange.upperBound...].prefix(while: \.isNumber))
+            if let vid = UInt16(vidStr), let pid = UInt16(pidStr) {
+                return (vid, pid)
+            }
+        }
+        // Format: "VID_XXXX&PID_XXXX" (hex)
         if let vidRange = modelID.range(of: "VID_", options: .caseInsensitive),
            let pidRange = modelID.range(of: "PID_", options: .caseInsensitive) {
             let vidStr = String(modelID[vidRange.upperBound...].prefix(4))
