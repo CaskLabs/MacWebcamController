@@ -41,6 +41,14 @@ struct MenuBarView: View {
                     .padding(.vertical, 8)
             }
 
+            if let error = viewModel.errorMessage {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+            }
+
             Divider()
 
             HStack {

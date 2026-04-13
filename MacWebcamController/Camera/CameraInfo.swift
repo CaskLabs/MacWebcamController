@@ -1,7 +1,8 @@
 import Foundation
 
 /// Information about a detected camera, combining AVFoundation metadata with the UVC device.
-struct CameraInfo: Identifiable, Sendable {
+struct CameraInfo: Identifiable, Sendable, Equatable {
+    static func == (lhs: CameraInfo, rhs: CameraInfo) -> Bool { lhs.id == rhs.id }
     let id: String          // AVCaptureDevice.uniqueID (persistent key for UserDefaults)
     let name: String        // User-facing device name
     let modelID: String     // Model identifier (may contain vendor:product)

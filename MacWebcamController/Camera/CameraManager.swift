@@ -41,6 +41,9 @@ final class CameraManager {
         refreshCameras()
     }
 
+    // MARK: - Disconnect Notification
+
+    /// Called when the camera list changes; observers can watch `cameras` for changes.
     func refreshCameras() {
         guard let session = discoverySession else { return }
         let avDevices = session.devices
