@@ -10,7 +10,9 @@ enum UVCDeviceDiscovery {
     static func discoverDevices() -> [UVCDevice] {
         var devices: [UVCDevice] = []
 
-        // __createMatchingDictionary is the NS_REFINED_FOR_SWIFT name
+        // Match on VC interfaces to find the vcInterfaceNumber and config descriptor,
+        // then open the parent IOUSBHostDevice for control requests (avoids claiming
+        // the interface which conflicts with the system camera driver).
         let matching = IOUSBHostInterface.__createMatchingDictionary(
             withVendorID: nil,
             productID: nil,
@@ -46,37 +48,47 @@ enum UVCDeviceDiscovery {
         return devices
     }
 
-    /// Opens a UVCDevice from a matched IOKit service.
-    private static func createDevice(from service: io_service_t) -> UVCDevice? {
-        // __init is the NS_REFINED_FOR_SWIFT init; try without capture first
-        let interface: IOUSBHostInterface
+    /// Opens a UVCDevice from a matched IOKit VC interface service.
+    private static func createDevice(from interfaceService: io_service_t) -> UVCDevice? {
+        // Read interface number and device properties from the IOKit registry
+        let vcInterfaceNumber = interfaceNumber(from: interfaceService)
+        let (deviceService, name, locationID, vendorID, productID) = deviceProperties(from: interfaceService)
+        guard deviceService != 0 else { return nil }
+        defer { IOObjectRelease(deviceService) }
+
+        // Open the parent IOUSBHostDevice — sends control requests on ep0 without
+        // claiming the VC interface, which avoids conflicts with IOUSBVideoSupport.kext.
+        let hostDevice: IOUSBHostDevice
         do {
-            interface = try IOUSBHostInterface(
-                __ioService: service,
+            hostDevice = try IOUSBHostDevice(
+                __ioService: deviceService,
                 options: [],
                 queue: nil,
                 interestHandler: nil
             )
         } catch {
-            // Interface may be held by another client — try device capture
-            do {
-                interface = try IOUSBHostInterface(
-                    __ioService: service,
-                    options: .deviceCapture,
-                    queue: nil,
-                    interestHandler: nil
-                )
-            } catch {
-                print("[UVC] Cannot open interface: \(error.localizedDescription)")
-                return nil
+            print("[UVC] Cannot open IOUSBHostDevice for \(name): \(error.localizedDescription)")
+            return nil
+        }
+
+        // Read configuration descriptor from the interface service via a temporary
+        // IOUSBHostInterface (we only need the descriptor bytes, not to claim it).
+        var configData: Data?
+        if let iface = try? IOUSBHostInterface(
+            __ioService: interfaceService,
+            options: [],
+            queue: nil,
+            interestHandler: nil
+        ) {
+            let ptr = iface.configurationDescriptor
+            let totalLength = Int(ptr.pointee.wTotalLength.littleEndian)
+            if totalLength > 0 {
+                configData = Data(bytes: ptr, count: totalLength)
             }
         }
 
-        let vcInterfaceNumber = interfaceNumber(from: service)
-        let (name, locationID, vendorID, productID) = deviceProperties(from: service)
-
         let device = UVCDevice(
-            interface: interface,
+            hostDevice: hostDevice,
             vcInterfaceNumber: vcInterfaceNumber,
             name: name,
             locationID: locationID,
@@ -84,19 +96,15 @@ enum UVCDeviceDiscovery {
             productID: productID
         )
 
-        // Parse configuration descriptor for UVC unit IDs and bmControls bitmasks
-        let ptr = interface.configurationDescriptor
-        let totalLength = Int(ptr.pointee.wTotalLength.littleEndian)
-        if totalLength > 0 {
-            let configData = Data(bytes: ptr, count: totalLength)
-            let info = UVCDescriptorParser.parse(configurationDescriptor: configData)
+        if let data = configData {
+            let info = UVCDescriptorParser.parse(configurationDescriptor: data)
             device.configure(
                 processingUnitID: info.processingUnitID,
                 cameraTerminalID: info.cameraTerminalID,
                 supportedPUControls: info.puControlsBitmask,
                 supportedCTControls: info.ctControlsBitmask
             )
-            print("[UVC] Found: \(name) VID:0x\(String(vendorID, radix: 16)) PID:0x\(String(productID, radix: 16)) PU:\(info.processingUnitID) CT:\(info.cameraTerminalID)")
+            print("[UVC] Found: \(name) VID:0x\(String(vendorID, radix: 16)) PID:0x\(String(productID, radix: 16)) PU:\(info.processingUnitID) CT:\(info.cameraTerminalID) PU-bmControls:0x\(String(info.puControlsBitmask, radix: 16)) CT-bmControls:0x\(String(info.ctControlsBitmask, radix: 16))")
         } else {
             print("[UVC] No config descriptor for \(name)")
         }
@@ -113,10 +121,12 @@ enum UVCDeviceDiscovery {
         return UInt8((prop.takeRetainedValue() as? NSNumber)?.intValue ?? 0)
     }
 
-    private static func deviceProperties(from service: io_service_t) -> (String, UInt32, UInt16, UInt16) {
+    /// Returns (deviceService, name, locationID, vendorID, productID).
+    /// Caller is responsible for releasing the returned io_object_t.
+    private static func deviceProperties(from service: io_service_t) -> (io_object_t, String, UInt32, UInt16, UInt16) {
         var parent: io_object_t = 0
         guard IORegistryEntryGetParentEntry(service, kIOServicePlane, &parent) == KERN_SUCCESS else {
-            return ("Unknown Camera", 0, 0, 0)
+            return (0, "Unknown Camera", 0, 0, 0)
         }
 
         let className = ioClassName(parent)
@@ -128,12 +138,14 @@ enum UVCDeviceDiscovery {
             var grandParent: io_object_t = 0
             guard IORegistryEntryGetParentEntry(parent, kIOServicePlane, &grandParent) == KERN_SUCCESS else {
                 IOObjectRelease(parent)
-                return ("Unknown Camera", 0, 0, 0)
+                return (0, "Unknown Camera", 0, 0, 0)
             }
             IOObjectRelease(parent)
             deviceEntry = grandParent
         }
-        defer { IOObjectRelease(deviceEntry) }
+
+        // Retain so the caller can release it after use
+        IOObjectRetain(deviceEntry)
 
         let name = registryString(deviceEntry, key: "USB Product Name")
             ?? registryString(deviceEntry, key: kUSBProductString)
@@ -142,7 +154,7 @@ enum UVCDeviceDiscovery {
         let vendorID   = UInt16(registryInt(deviceEntry, key: kUSBVendorID) ?? 0)
         let productID  = UInt16(registryInt(deviceEntry, key: kUSBProductID) ?? 0)
 
-        return (name, locationID, vendorID, productID)
+        return (deviceEntry, name, locationID, vendorID, productID)
     }
 
     private static func registryInt(_ entry: io_object_t, key: String) -> Int? {

@@ -12,6 +12,12 @@ final class CameraViewModel {
     var errorMessage: String?
     var isLoading: Bool = false
 
+    // Auto-mode state
+    var autoExposureEnabled: Bool = false
+    var autoExposureSupported: Bool = false
+    var whiteBalanceAutoEnabled: Bool = false
+    var whiteBalanceAutoSupported: Bool = false
+
     private let ioQueue = DispatchQueue(label: "com.macwebcamcontroller.uvc", qos: .userInitiated)
 
     init() {
@@ -25,6 +31,10 @@ final class CameraViewModel {
         selectedCameraID = camera?.id
         errorMessage = nil
         resetControls()
+        autoExposureEnabled = false
+        autoExposureSupported = false
+        whiteBalanceAutoEnabled = false
+        whiteBalanceAutoSupported = false
 
         guard let camera, let device = camera.uvcDevice else { return }
 
@@ -91,9 +101,26 @@ final class CameraViewModel {
             }
         }
 
+        // Read auto-mode state
+        let aeSupported = device.isAutoExposureSupported
+        var aeEnabled = false
+        if aeSupported {
+            aeEnabled = (try? device.getAutoExposureMode()).map { $0 != 1 } ?? false
+        }
+
+        let wbAutoSupported = device.isWhiteBalanceAutoSupported
+        var wbAutoEnabled = false
+        if wbAutoSupported {
+            wbAutoEnabled = (try? device.getWhiteBalanceAuto()) ?? false
+        }
+
         let finalControls = updated
         Task { @MainActor in
             self.controls = finalControls
+            self.autoExposureSupported = aeSupported
+            self.autoExposureEnabled = aeEnabled
+            self.whiteBalanceAutoSupported = wbAutoSupported
+            self.whiteBalanceAutoEnabled = wbAutoEnabled
             self.isLoading = false
         }
     }
@@ -122,6 +149,35 @@ final class CameraViewModel {
                         self?.controls[control]?.error = error.localizedDescription
                     }
                 }
+            }
+        }
+    }
+
+    func setAutoExposure(_ enabled: Bool) {
+        guard let device = selectedCamera?.uvcDevice, autoExposureSupported else { return }
+        autoExposureEnabled = enabled
+
+        ioQueue.async { [weak self] in
+            do {
+                // 1 = Manual, 8 = Aperture Priority (most cameras use this for "auto")
+                try device.setAutoExposureMode(enabled ? 8 : 1)
+            } catch {
+                print("[UVC] setAutoExposureMode failed: \(error)")
+                Task { @MainActor in self?.autoExposureEnabled = !enabled }
+            }
+        }
+    }
+
+    func setWhiteBalanceAuto(_ enabled: Bool) {
+        guard let device = selectedCamera?.uvcDevice, whiteBalanceAutoSupported else { return }
+        whiteBalanceAutoEnabled = enabled
+
+        ioQueue.async { [weak self] in
+            do {
+                try device.setWhiteBalanceAuto(enabled)
+            } catch {
+                print("[UVC] setWhiteBalanceAuto failed: \(error)")
+                Task { @MainActor in self?.whiteBalanceAutoEnabled = !enabled }
             }
         }
     }
