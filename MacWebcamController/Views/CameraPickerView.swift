@@ -7,19 +7,29 @@ struct CameraPickerView: View {
     var body: some View {
         @Bindable var vm = viewModel
 
-        Picker("Camera", selection: $vm.selectedCameraID) {
-            Text("None").tag(String?.none)
-            ForEach(cameraManager.cameras) { camera in
-                Text(camera.name).tag(Optional(camera.id))
+        if cameraManager.cameras.isEmpty {
+            HStack {
+                Image(systemName: "camera.slash")
+                    .foregroundStyle(.secondary)
+                Text("No external cameras found")
+                    .foregroundStyle(.secondary)
+                    .font(.subheadline)
             }
-        }
-        .labelsHidden()
-        .onChange(of: vm.selectedCameraID) { _, newValue in
-            if let id = newValue,
-               let camera = cameraManager.cameras.first(where: { $0.id == id }) {
+        } else {
+            Picker("Camera", selection: $vm.selectedCameraID) {
+                Text("Select a camera…").tag(String?.none)
+                ForEach(cameraManager.cameras) { camera in
+                    HStack {
+                        Image(systemName: camera.uvcDevice != nil ? "camera.fill" : "camera")
+                        Text(camera.name)
+                    }
+                    .tag(Optional(camera.id))
+                }
+            }
+            .labelsHidden()
+            .onChange(of: vm.selectedCameraID) { _, newValue in
+                let camera = cameraManager.cameras.first { $0.id == newValue }
                 viewModel.selectCamera(camera)
-            } else {
-                viewModel.selectCamera(nil)
             }
         }
     }

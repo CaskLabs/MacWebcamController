@@ -25,6 +25,7 @@
 		A100000015 /* UVCDevice.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000017; };
 		A100000016 /* UVCDescriptorParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000018; };
 		A100000017 /* UVCDeviceDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000019; };
+		A100000019 /* SettingsPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000022; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -42,6 +43,7 @@
 		B100000012 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
 		B100000013 /* IOKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = IOKit.framework; path = System/Library/Frameworks/IOKit.framework; sourceTree = SDKROOT; };
 		B100000021 /* IOUSBHost.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = IOUSBHost.framework; path = System/Library/Frameworks/IOUSBHost.framework; sourceTree = SDKROOT; };
+		B100000022 /* SettingsPersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsPersistence.swift; sourceTree = "<group>"; };
 		B100000014 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		B100000015 /* MacWebcamController.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MacWebcamController.entitlements; sourceTree = "<group>"; };
 		B100000016 /* UVCConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UVCConstants.swift; sourceTree = "<group>"; };
@@ -134,6 +136,7 @@
 		D100000007 /* Persistence */ = {
 			isa = PBXGroup;
 			children = (
+				B100000022 /* SettingsPersistence.swift */,
 			);
 			path = Persistence;
 			sourceTree = "<group>";
@@ -239,6 +242,7 @@
 				A100000015 /* UVCDevice.swift in Sources */,
 				A100000016 /* UVCDescriptorParser.swift in Sources */,
 				A100000017 /* UVCDeviceDiscovery.swift in Sources */,
+				A100000019 /* SettingsPersistence.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

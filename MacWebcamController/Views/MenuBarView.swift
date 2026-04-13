@@ -5,32 +5,60 @@ struct MenuBarView: View {
     @Environment(CameraViewModel.self) private var viewModel
     @Environment(\.openWindow) private var openWindow
 
+    // Controls shown in the compact popover
+    private let quickControls: [UVCControl] = [
+        .brightness, .contrast, .whiteBalanceTemperature, .exposureAbsolute, .focusAbsolute
+    ]
+
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             CameraPickerView()
 
-            Divider()
+            if viewModel.isLoading {
+                HStack {
+                    ProgressView()
+                        .scaleEffect(0.6)
+                    Text("Loading controls…")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .center)
+            } else if viewModel.selectedCamera != nil {
+                Divider()
 
-            if viewModel.selectedCamera != nil {
-                Text("Controls coming soon...")
-                    .foregroundStyle(.secondary)
-                    .font(.caption)
+                ForEach(quickControls) { control in
+                    if let state = viewModel.controls[control] {
+                        ControlSliderView(control: control, state: state) { value in
+                            viewModel.setValue(value, for: control)
+                        }
+                    }
+                }
             } else {
-                Text("No camera selected")
+                Text("Select a camera above to adjust settings.")
+                    .font(.caption)
                     .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 8)
             }
 
             Divider()
 
-            Button("Open Full Controls") {
-                openWindow(id: "main")
-            }
+            HStack {
+                Button("Open Full Controls") {
+                    openWindow(id: "main")
+                }
+                .buttonStyle(.borderless)
 
-            Button("Quit") {
-                NSApplication.shared.terminate(nil)
+                Spacer()
+
+                Button("Quit") {
+                    NSApplication.shared.terminate(nil)
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
             }
         }
-        .padding()
+        .padding(12)
         .frame(width: 300)
     }
 }
