@@ -71,20 +71,18 @@ enum UVCDeviceDiscovery {
             return nil
         }
 
-        // Read configuration descriptor from the interface service via a temporary
-        // IOUSBHostInterface (we only need the descriptor bytes, not to claim it).
+        // Read configuration descriptor directly from the device (not the interface).
+        // IOUSBHostInterface cannot be opened while the system camera driver holds it,
+        // but IOUSBHostDevice.configurationDescriptor is always accessible.
         var configData: Data?
-        if let iface = try? IOUSBHostInterface(
-            __ioService: interfaceService,
-            options: [],
-            queue: nil,
-            interestHandler: nil
-        ) {
-            let ptr = iface.configurationDescriptor
+        if let ptr = hostDevice.configurationDescriptor {
             let totalLength = Int(ptr.pointee.wTotalLength.littleEndian)
             if totalLength > 0 {
                 configData = Data(bytes: ptr, count: totalLength)
+                print("[UVC] Config descriptor: \(totalLength) bytes")
             }
+        } else {
+            print("[UVC] configurationDescriptor is nil for \(name)")
         }
 
         let device = UVCDevice(
