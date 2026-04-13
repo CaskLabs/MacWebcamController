@@ -36,8 +36,12 @@ final class CameraViewModel {
         whiteBalanceAutoEnabled = false
         whiteBalanceAutoSupported = false
 
-        guard let camera, let device = camera.uvcDevice else { return }
+        guard let camera, let device = camera.uvcDevice else {
+            print("[ViewModel] selectCamera: no UVC device for '\(camera?.name ?? "nil")'")
+            return
+        }
 
+        print("[ViewModel] selectCamera: '\(camera.name)' PU:\(device.processingUnitID) CT:\(device.cameraTerminalID) puControls:0x\(String(device.supportedPUControls, radix: 16)) ctControls:0x\(String(device.supportedCTControls, radix: 16))")
         isLoading = true
         ioQueue.async { [weak self] in
             self?.loadControls(from: device, cameraID: camera.id)

@@ -73,14 +73,25 @@ final class CameraManager {
         let locationID = extractLocationID(from: uniqueID)
         let (vendorID, productID) = extractVendorProduct(from: modelID)
 
+        print("[CameraManager] Matching '\(localizedName)' uniqueID=\(uniqueID) modelID=\(modelID)")
+        print("[CameraManager]   Extracted locationID=\(locationID.map { String(format: "0x%08X", $0) } ?? "nil") VID:0x\(String(vendorID, radix: 16)) PID:0x\(String(productID, radix: 16))")
+        print("[CameraManager]   Available UVC devices: \(uvcDevices.map { "\($0.name) loc:0x\(String($0.locationID, radix: 16)) vid:0x\(String($0.vendorID, radix: 16)) pid:0x\(String($0.productID, radix: 16))" })")
+
         let uvcDevice: UVCDevice?
         if let locID = locationID, let match = uvcDevices.first(where: { $0.locationID == locID }) {
             uvcDevice = match
+            print("[CameraManager]   Matched by locationID")
         } else if vendorID != 0 || productID != 0 {
             let candidates = uvcDevices.filter { $0.vendorID == vendorID && $0.productID == productID }
             uvcDevice = candidates.count == 1 ? candidates.first : nil
+            print("[CameraManager]   VID/PID match: \(candidates.count) candidate(s), using: \(uvcDevice != nil)")
         } else {
             uvcDevice = uvcDevices.first(where: { $0.name == localizedName })
+            print("[CameraManager]   Name match: \(uvcDevice != nil)")
+        }
+
+        if uvcDevice == nil {
+            print("[CameraManager]   WARNING: No UVC device matched for '\(localizedName)'")
         }
 
         return CameraInfo(
