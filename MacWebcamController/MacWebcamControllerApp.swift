@@ -6,6 +6,25 @@ private class AppDelegate: NSObject, NSApplicationDelegate {
         let mode = AppearanceMode(rawValue: raw) ?? .system
         mode.apply()
     }
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(windowCountChanged),
+            name: NSWindow.didBecomeKeyNotification, object: nil)
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(windowCountChanged),
+            name: NSWindow.willCloseNotification, object: nil)
+    }
+
+    @objc private func windowCountChanged(_ notification: Notification) {
+        // Give SwiftUI a moment to update the window list after a close
+        DispatchQueue.main.async {
+            let hasWindow = NSApp.windows.contains {
+                $0.isVisible && $0.styleMask.contains(.titled)
+            }
+            NSApp.setActivationPolicy(hasWindow ? .regular : .accessory)
+        }
+    }
 }
 
 @main
