@@ -25,10 +25,17 @@ struct ControlSliderView: View {
                 Slider(
                     value: Binding(
                         get: { Double(state.currentValue) },
-                        set: { scheduleUpdate(Int($0.rounded())) }
+                        // Always move at step 1 for smooth dragging; snap to
+                        // the camera's resolution step before sending.
+                        set: { newVal in
+                            let res = max(1, state.resolution)
+                            let snapped = (Int(newVal.rounded()) / res) * res
+                            let clamped = max(state.minimum, min(state.maximum, snapped))
+                            scheduleUpdate(clamped)
+                        }
                     ),
                     in: Double(state.minimum)...Double(state.maximum),
-                    step: Double(max(1, state.resolution))
+                    step: 1.0
                 )
             } else {
                 Slider(value: .constant(0))

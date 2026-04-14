@@ -150,17 +150,17 @@ final class CameraViewModel {
         ioQueue.async { [weak self] in
             do {
                 try device.setValue(value, for: control)
-                // Persist on success
+                print("[UVC] SET_CUR \(control.displayName) = \(value) OK")
                 if let cameraID = self?.selectedCamera?.id {
                     SettingsPersistence().save(value: value, for: control, cameraID: cameraID)
                 }
             } catch {
-                print("[UVC] SET_CUR failed for \(control.displayName): \(error)")
+                print("[UVC] SET_CUR \(control.displayName) = \(value) FAILED: \(error)")
                 // Revert optimistic update by re-reading
                 if let actualValue = try? device.getValue(for: control) {
                     Task { @MainActor in
                         self?.controls[control]?.currentValue = actualValue
-                        self?.controls[control]?.error = error.localizedDescription
+                        self?.controls[control]?.error = "Set failed: \(error.localizedDescription)"
                     }
                 }
             }
