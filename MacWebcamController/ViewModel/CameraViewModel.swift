@@ -50,7 +50,8 @@ final class CameraViewModel {
         isLoading = true
         let cameraID = camera.id
         ioQueue.async { [weak self] in
-            self?.loadControls(from: device, cameraID: cameraID)
+            guard let self else { return }
+            self.loadControls(from: device, cameraID: cameraID)
         }
     }
 
@@ -162,7 +163,8 @@ final class CameraViewModel {
         // Optimistic UI update
         controls[control]?.currentValue = value
 
-        let cameraID = selectedCamera?.id
+        // Capture Sendable values before crossing actor boundary
+        let cameraID: String? = selectedCamera?.id
         ioQueue.async { [weak self] in
             do {
                 try device.setValue(value, for: control)

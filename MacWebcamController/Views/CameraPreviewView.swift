@@ -11,17 +11,17 @@ struct CameraPreviewView: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: CameraPreviewNSView, context: Context) {
-        let device = cameraID.flatMap { AVCaptureDevice(uniqueID: $0) }
-        nsView.updateDevice(device)
+        nsView.updateDevice(cameraID)
     }
 }
 
 // MARK: - NSView
 
 final class CameraPreviewNSView: NSView, @unchecked Sendable {
-    private let session = AVCaptureSession()
-    private let previewLayer = AVCaptureVideoPreviewLayer()
-    private var currentDeviceID: String?
+    // nonisolated(unsafe): these are accessed only from sessionQueue, which we manage manually.
+    nonisolated(unsafe) private let session = AVCaptureSession()
+    nonisolated(unsafe) private let previewLayer = AVCaptureVideoPreviewLayer()
+    nonisolated(unsafe) private var currentDeviceID: String?
     private let sessionQueue = DispatchQueue(label: "com.macwebcamcontroller.preview")
 
     override init(frame: NSRect) {
@@ -47,21 +47,17 @@ final class CameraPreviewNSView: NSView, @unchecked Sendable {
         previewLayer.frame = bounds
     }
 
-    func updateDevice(_ device: AVCaptureDevice?) {
-        guard device?.uniqueID != currentDeviceID else { return }
-        currentDeviceID = device?.uniqueID
+    func updateDevice(_ deviceID: String?) {
+        guard deviceID != currentDeviceID else { return }
+        currentDeviceID = deviceID
 
-        // Capture only the uniqueID string (Sendable) — not AVCaptureDevice itself
-        let deviceID = device?.uniqueID
-        let session = self.session
-
-        sessionQueue.async {
+        sessionQueue.async { [session] in
             session.beginConfiguration()
             session.inputs.forEach { session.removeInput($0) }
 
             if let id = deviceID,
-               let dev = AVCaptureDevice(uniqueID: id),
-               let input = try? AVCaptureDeviceInput(device: dev),
+               let device = AVCaptureDevice(uniqueID: id),
+               let input = try? AVCaptureDeviceInput(device: device),
                session.canAddInput(input) {
                 session.addInput(input)
             }

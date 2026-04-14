@@ -71,7 +71,7 @@ struct ControlSliderView: View {
     @MainActor
     private func scheduleUpdate(_ value: Int) {
         debounceTask?.cancel()
-        debounceTask = Task {
+        debounceTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(50))
             guard !Task.isCancelled else { return }
             onValueChanged(value)
