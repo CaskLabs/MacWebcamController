@@ -1,6 +1,7 @@
 {
   "images" : [
     {
+      "filename" : "AppIcon256.png",
       "idiom" : "mac",
       "platform" : "macOS",
       "size" : "1024x1024"

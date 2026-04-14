@@ -35,7 +35,7 @@ struct MainWindowView: View {
                 Divider()
 
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
+                    LazyVStack(alignment: .leading, spacing: 20, pinnedViews: []) {
                         ControlSection(title: "Image", controls: [
                             .brightness, .contrast, .saturation, .sharpness, .gamma
                         ])
@@ -46,6 +46,7 @@ struct MainWindowView: View {
                     }
                     .padding()
                 }
+                .scrollContentBackground(.hidden)
             } else {
                 ContentUnavailableView(
                     "No Camera Selected",
