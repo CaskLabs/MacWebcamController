@@ -8,9 +8,9 @@ final class CameraManager {
     private(set) var cameras: [CameraInfo] = []
 
     private var discoverySession: AVCaptureDevice.DiscoverySession?
-    // nonisolated(unsafe) so deinit (which is nonisolated) can release them
-    nonisolated(unsafe) private var connectedObserver: Any?
-    nonisolated(unsafe) private var disconnectedObserver: Any?
+    // Observers stored outside @Observable tracking so deinit can release them
+    // without hitting actor-isolation restrictions.
+    private let observerBox = NotificationObserverBox()
 
     init() {
         startDiscovery()
@@ -26,14 +26,14 @@ final class CameraManager {
         )
         discoverySession = session
 
-        connectedObserver = NotificationCenter.default.addObserver(
-            forName: .AVCaptureDeviceWasConnected, object: nil, queue: .main
+        observerBox.connected = NotificationCenter.default.addObserver(
+            forName: AVCaptureDevice.wasConnectedNotification, object: nil, queue: .main
         ) { [weak self] _ in
             Task { @MainActor in self?.refreshCameras() }
         }
 
-        disconnectedObserver = NotificationCenter.default.addObserver(
-            forName: .AVCaptureDeviceWasDisconnected, object: nil, queue: .main
+        observerBox.disconnected = NotificationCenter.default.addObserver(
+            forName: AVCaptureDevice.wasDisconnectedNotification, object: nil, queue: .main
         ) { [weak self] _ in
             Task { @MainActor in self?.refreshCameras() }
         }
@@ -144,5 +144,19 @@ final class CameraManager {
             }
         }
         return (0, 0)
+    }
+}
+
+// MARK: - Observer Storage
+
+/// Holds NotificationCenter observer tokens outside @Observable/@MainActor
+/// so they can be released from the nonisolated deinit context.
+private final class NotificationObserverBox: @unchecked Sendable {
+    var connected: Any?
+    var disconnected: Any?
+
+    deinit {
+        if let obs = connected    { NotificationCenter.default.removeObserver(obs) }
+        if let obs = disconnected { NotificationCenter.default.removeObserver(obs) }
     }
 }
