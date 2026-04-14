@@ -20,13 +20,12 @@ directly from your menu bar or a full standalone window.
 - 🔄 **Per-camera settings persistence**
 - 🚀 **Launch at Login**
 - 🍎 **Native macOS app** — built with SwiftUI + AppKit, no external dependencies
-- ⚡ **Designed for Apple Silicon** — arm64, macOS 26+
-
+  
 ---
 
 ## Requirements
 
-- **macOS 26 (Tahoe)** or later
+- **macOS 26 (Tahoe)** or later (older version might work, but were not tested)
 - An external USB UVC-compliant camera
   _(built-in FaceTime cameras have limited UVC support due to Apple restrictions)_
 - Xcode 26 or later (to build from source)
