@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>LSUIElement</key>
-	<true/>
+	<false/>
 	<key>NSCameraUsageDescription</key>
 	<string>MacWebcamController needs camera access to detect connected cameras.</string>
 </dict>
