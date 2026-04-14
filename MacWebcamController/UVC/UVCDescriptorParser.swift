@@ -29,6 +29,7 @@ enum UVCDescriptorParser {
     static func parse(configurationDescriptor data: Data) -> UVCDescriptorInfo {
         var info = UVCDescriptorInfo()
         var offset = 0
+        var inVCInterface = false  // Only parse CS descriptors inside the VC interface
 
         while offset + 2 <= data.count {
             let bLength = Int(data[offset])
@@ -38,8 +39,23 @@ enum UVCDescriptorParser {
             guard bLength >= 2 else { break }
             guard offset + bLength <= data.count else { break }
 
-            // We only care about class-specific interface descriptors (0x24)
-            if bDescriptorType == CS_INTERFACE && bLength >= 3 {
+            // Track standard interface descriptors to know which interface we're in
+            if bDescriptorType == 0x04 && bLength >= 9 {
+                let bInterfaceClass    = data[offset + 5]
+                let bInterfaceSubClass = data[offset + 6]
+                if bInterfaceClass == CC_VIDEO && bInterfaceSubClass == SC_VIDEOCONTROL {
+                    info.vcInterfaceNumber = data[offset + 2]
+                    inVCInterface = true
+                } else {
+                    // Any non-VC interface — stop parsing for UVC units.
+                    // VS descriptors share the 0x24 type but have different subtypes;
+                    // parsing them after the VC section produces wrong unit IDs.
+                    inVCInterface = false
+                }
+            }
+
+            // Only parse class-specific descriptors while inside the VC interface
+            if inVCInterface && bDescriptorType == CS_INTERFACE && bLength >= 3 {
                 let bDescriptorSubtype = data[offset + 2]
                 parseClassSpecificDescriptor(
                     subtype: bDescriptorSubtype,
@@ -48,15 +64,6 @@ enum UVCDescriptorParser {
                     length: bLength,
                     info: &info
                 )
-            }
-
-            // Also look for standard interface descriptors to find VC interface number
-            if bDescriptorType == 0x04 && bLength >= 9 { // INTERFACE descriptor
-                let bInterfaceClass = data[offset + 5]
-                let bInterfaceSubClass = data[offset + 6]
-                if bInterfaceClass == CC_VIDEO && bInterfaceSubClass == SC_VIDEOCONTROL {
-                    info.vcInterfaceNumber = data[offset + 2] // bInterfaceNumber
-                }
             }
 
             offset += bLength

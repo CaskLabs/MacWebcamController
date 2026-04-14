@@ -86,6 +86,15 @@ final class CameraViewModel {
             let defaultValue = (try? device.getValue(for: control, request: .getDefault)) ?? ((minimum + maximum) / 2)
             let current      = (try? device.getValue(for: control)) ?? defaultValue
 
+            // Degenerate range means the camera responded but doesn't actually
+            // support adjusting this control (e.g. Sony ZV-E10 returns 6/6).
+            if maximum <= minimum {
+                state.isSupported = false
+                print("[UVC] \(control.displayName) degenerate range [\(minimum)…\(maximum)], marking unsupported")
+                updated[control] = state
+                continue
+            }
+
             state.minimum      = minimum
             state.maximum      = maximum
             state.resolution   = max(1, resolution)
