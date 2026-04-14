@@ -7,10 +7,6 @@ import Observation
 final class CameraManager {
     private(set) var cameras: [CameraInfo] = []
 
-    // Shared capture session — multiple AVCaptureVideoPreviewLayers can attach to one session.
-    nonisolated(unsafe) let previewSession = AVCaptureSession()
-    private let previewQueue = DispatchQueue(label: "com.macwebcamcontroller.preview")
-
     private var discoverySession: AVCaptureDevice.DiscoverySession?
     // Observers stored outside @Observable tracking so deinit can release them
     // without hitting actor-isolation restrictions.
@@ -18,28 +14,6 @@ final class CameraManager {
 
     init() {
         startDiscovery()
-    }
-
-    // MARK: - Preview Session
-
-    func updatePreviewDevice(_ deviceID: String?) {
-        let session = previewSession
-        previewQueue.async {
-            session.beginConfiguration()
-            session.inputs.forEach { session.removeInput($0) }
-            if let id = deviceID,
-               let device = AVCaptureDevice(uniqueID: id),
-               let input = try? AVCaptureDeviceInput(device: device),
-               session.canAddInput(input) {
-                session.addInput(input)
-            }
-            session.commitConfiguration()
-            if deviceID != nil {
-                if !session.isRunning { session.startRunning() }
-            } else {
-                session.stopRunning()
-            }
-        }
     }
 
     // MARK: - Discovery

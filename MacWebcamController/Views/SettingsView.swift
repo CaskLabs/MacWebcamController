@@ -21,7 +21,6 @@ enum AppearanceMode: String, CaseIterable {
 
 struct SettingsView: View {
     @AppStorage("appearanceMode") private var appearanceRaw: String = AppearanceMode.system.rawValue
-    @AppStorage("menuBarPreviewEnabled") private var menuBarPreviewEnabled: Bool = true
     @State private var launchAtLogin: Bool = false
 
     private var appearance: AppearanceMode {
@@ -51,7 +50,6 @@ struct SettingsView: View {
                     .onChange(of: launchAtLogin) { _, enabled in
                         setLaunchAtLogin(enabled)
                     }
-                Toggle("Show Preview in Menu Bar", isOn: $menuBarPreviewEnabled)
             }
         }
         .formStyle(.grouped)

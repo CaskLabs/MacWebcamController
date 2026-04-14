@@ -41,9 +41,6 @@ struct MacWebcamControllerApp: App {
                 .onChange(of: cameraManager.cameras) { _, cameras in
                     handleCameraListChange(cameras)
                 }
-                .onChange(of: viewModel.selectedCameraID) { _, id in
-                    cameraManager.updatePreviewDevice(id)
-                }
         }
         .menuBarExtraStyle(.window)
 
@@ -53,9 +50,6 @@ struct MacWebcamControllerApp: App {
                 .environment(viewModel)
                 .onChange(of: cameraManager.cameras) { _, cameras in
                     handleCameraListChange(cameras)
-                }
-                .onChange(of: viewModel.selectedCameraID) { _, id in
-                    cameraManager.updatePreviewDevice(id)
                 }
         }
         .defaultSize(width: 420, height: 600)

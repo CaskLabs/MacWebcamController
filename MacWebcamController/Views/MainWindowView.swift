@@ -42,7 +42,7 @@ struct MainWindowView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if viewModel.selectedCamera != nil {
                 // Live preview — fixed 16:9 aspect ratio, max 240pt tall
-                CameraPreviewView(session: cameraManager.previewSession)
+                CameraPreviewView(cameraID: viewModel.selectedCamera?.id)
                     .aspectRatio(16 / 9, contentMode: .fit)
                     .frame(maxHeight: 240)
                     .background(.black)

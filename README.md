@@ -126,6 +126,12 @@ Auto exposure and auto white balance are shown only when the camera reports supp
 
 ---
 
+## Planned / TODO
+
+- [ ] **Live preview in menu bar popover** — show a 16:9 camera preview directly in the compact popover. Blocked by a macOS AVFoundation limitation: two `AVCaptureSession` instances cannot capture the same device simultaneously. Requires sharing a single session between the menu bar and main window previews, which needs further investigation.
+
+---
+
 ## Contributing
 
 Contributions are welcome. Open an issue to discuss ideas or bugs, or submit a pull request directly.
