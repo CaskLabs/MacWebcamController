@@ -54,9 +54,6 @@ struct MacWebcamControllerApp: App {
         }
         .defaultSize(width: 420, height: 600)
 
-        Settings {
-            SettingsView()
-        }
     }
 
     /// Deselects the current camera if it was disconnected.

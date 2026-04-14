@@ -3,26 +3,41 @@ import SwiftUI
 struct MainWindowView: View {
     @Environment(CameraManager.self) private var cameraManager
     @Environment(CameraViewModel.self) private var viewModel
+    @State private var showingSettings = false
 
     var body: some View {
         VStack(spacing: 0) {
-            // Header: camera picker
+            // Header
             HStack {
-                CameraPickerView()
-                Spacer()
-                if viewModel.selectedCamera != nil {
-                    Button("Reset All") {
-                        viewModel.resetToDefaults()
+                if showingSettings {
+                    Text("Settings")
+                        .font(.headline)
+                } else {
+                    CameraPickerView()
+                    if viewModel.selectedCamera != nil {
+                        Button("Reset All") {
+                            viewModel.resetToDefaults()
+                        }
+                        .keyboardShortcut("r", modifiers: .command)
                     }
-                    .keyboardShortcut("r", modifiers: .command)
                 }
+                Spacer()
+                Button {
+                    withAnimation { showingSettings.toggle() }
+                } label: {
+                    Image(systemName: showingSettings ? "camera" : "gear")
+                }
+                .keyboardShortcut(",", modifiers: .command)
             }
             .padding()
             .background(.bar)
 
             Divider()
 
-            if viewModel.isLoading {
+            if showingSettings {
+                SettingsView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if viewModel.isLoading {
                 ProgressView("Loading camera controls…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if viewModel.selectedCamera != nil {

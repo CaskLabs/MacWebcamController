@@ -53,7 +53,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 340, height: 180)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
             launchAtLogin = (SMAppService.mainApp.status == .enabled)
             appearance.apply()
