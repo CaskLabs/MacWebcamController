@@ -1,9 +1,5 @@
 # MacWebcamController
 
-> ⚠️ **This project is in the planning stage. Development has not started
-> yet.** The structure, features, and architecture described below
-> represent the intended design and are subject to change.
-
 A lightweight macOS menu bar app to control UVC camera settings —
 brightness, contrast, saturation, white balance, focus, and more —
 directly from your menu bar or a full standalone window.
@@ -14,19 +10,21 @@ directly from your menu bar or a full standalone window.
 
 ---
 
-## Planned Features
+## Features
 
 - 📷 **Supports any UVC-compliant USB camera**
-- 🎛️ **Full UVC control surface** — brightness, contrast, saturation,
-  sharpness, gamma, white balance, gain, exposure, focus, backlight
-  compensation, and anti-flicker (powerline frequency)
-- 🖥️ **Menu bar mode** — quick access via a compact popover
-- 🪟 **Standalone window mode** — full controls in a dedicated window
-- 🔄 **Per-camera settings persistence** — remembers your settings per
-  device using `UserDefaults`
-- 🍎 **Native macOS app** — built with SwiftUI + AppKit, no external
-  dependencies
-- ⚡ **Designed for Apple Silicon**
+- 🎛️ **Full UVC control surface** — brightness, contrast, saturation, sharpness, gamma, white balance, gain, exposure, focus, backlight compensation, and anti-flicker (powerline frequency)
+- 🎥 **Live camera preview** — 16:9 preview directly in the control window
+- 🖥️ **Menu bar mode** — quick access to the 5 most-used controls via a compact popover
+- 🪟 **Standalone window mode** — all controls in a dedicated window, grouped in collapsible sections
+- 🤖 **Auto exposure & auto white balance toggles** — with manual sliders automatically disabled when auto mode is active
+- 💾 **Camera presets** — save, apply, update, and delete named presets per camera
+- 🔄 **Per-camera settings persistence** — remembers your settings per device across restarts
+- 🌗 **Appearance settings** — choose System, Light, or Dark mode
+- 🚀 **Launch at Login** — optional auto-start via `SMAppService`
+- 🐳 **Dynamic dock icon** — shown only when the control window is open
+- 🍎 **Native macOS app** — built with SwiftUI + AppKit, no external dependencies
+- ⚡ **Designed for Apple Silicon** — arm64, macOS 26+
 
 ---
 
@@ -34,73 +32,100 @@ directly from your menu bar or a full standalone window.
 
 - **macOS 26 (Tahoe)** or later
 - An external USB UVC-compliant camera
-  _(built-in FaceTime cameras have limited UVC support due to Apple
-  restrictions)_
+  _(built-in FaceTime cameras have limited UVC support due to Apple restrictions)_
 - Xcode 26 or later (to build from source)
 
 ---
 
 ## Installation
 
-> 🚧 No releases or builds are available yet. This section will be
-> updated once development begins.
+Build from source using Xcode:
+
+1. Clone the repository
+2. Open `MacWebcamController.xcodeproj` in Xcode 26+
+3. Select your Mac as the run destination
+4. Build and run (⌘R)
+
+No additional configuration is needed — the app has the sandbox disabled to allow direct IOKit USB access.
 
 ---
 
-## Planned Architecture
+## Usage
+
+- **Menu bar icon** — click the camera icon in the menu bar to open the compact popover with quick sliders and a camera picker
+- **Full controls** — click "Open Full Controls" in the popover to open the main window with all UVC controls
+- **Settings** — click the gear icon (or press ⌘,) in the main window to open the inline settings page
+- **Presets** — in the Presets section, click + to save the current settings as a named preset; apply, update, or delete presets at any time
+- **Reset** — click "Reset All" to restore all controls to their device defaults
+
+---
+
+## Architecture
 
 ```
-MacWebcamController
-├── AppDelegate          # Menu bar item, popover, and window lifecycle
-├── MenuBarView          # Compact SwiftUI popover view
-├── MainWindowView       # Full SwiftUI window with all controls
-├── CameraManager        # AVFoundation: camera discovery and selection
-├── UVCDevice            # IOKit: read/write UVC controls via USB
-│   └── UVCControl       # Enum of all standard UVC controls + selectors
-└── CameraViewModel      # ObservableObject binding UVC state to SwiftUI
+MacWebcamController/
+├── MacWebcamControllerApp.swift   # App entry point, AppDelegate, dock icon management
+├── UVC/
+│   ├── UVCConstants.swift         # UVC spec constants (request codes, descriptor types)
+│   ├── UVCControl.swift           # Enum of all UVC controls with selectors and data lengths
+│   ├── UVCDescriptorParser.swift  # Parses config descriptors → PU/CT IDs and bmControls
+│   ├── UVCDevice.swift            # IOUSBHostDevice wrapper: getValue / setValue
+│   └── UVCDeviceDiscovery.swift   # IOKit matching for Video Control interfaces
+├── Camera/
+│   ├── CameraManager.swift        # AVFoundation discovery + hot-plug detection
+│   └── CameraInfo.swift           # Per-camera data model (name, IDs, UVCDevice)
+├── ViewModel/
+│   ├── CameraViewModel.swift      # @Observable bridge between UVC hardware and SwiftUI
+│   └── ControlState.swift         # Per-control state: current, min, max, default, resolution
+├── Views/
+│   ├── MenuBarView.swift          # Compact popover with quick controls
+│   ├── MainWindowView.swift       # Full control window with collapsible sections
+│   ├── ControlSliderView.swift    # Reusable slider with immediate visual response
+│   ├── CameraPickerView.swift     # Camera selection dropdown
+│   ├── CameraPreviewView.swift    # Live AVCaptureSession preview
+│   └── SettingsView.swift         # Inline settings (appearance, launch at login)
+└── Persistence/
+    └── SettingsPersistence.swift  # UserDefaults persistence + preset JSON storage
 ```
 
-**Planned tech stack:**
-- UI: SwiftUI
+**Tech stack:**
+- UI: SwiftUI + AppKit
 - Camera discovery: AVFoundation
-- UVC control: IOKit (direct USB control requests, no external libraries)
+- UVC control: IOKit / IOUSBHost (direct USB control requests, no external libraries)
 - Persistence: UserDefaults (per camera, keyed by device ID)
+- Concurrency: Swift 6 strict concurrency, dedicated serial DispatchQueue for IOKit I/O
 
 ---
 
-## Planned UVC Controls
+## Supported UVC Controls
 
-| Control                | Unit             |
-|------------------------|------------------|
-| Brightness             | Processing Unit  |
-| Contrast               | Processing Unit  |
-| Saturation             | Processing Unit  |
-| Sharpness              | Processing Unit  |
-| Gamma                  | Processing Unit  |
-| White Balance (temp)   | Processing Unit  |
-| Gain                   | Processing Unit  |
-| Backlight Compensation | Processing Unit  |
-| Powerline Frequency    | Processing Unit  |
-| Exposure (absolute)    | Camera Terminal  |
-| Focus (absolute)       | Camera Terminal  |
+| Control                | Unit             | Signed |
+|------------------------|------------------|--------|
+| Brightness             | Processing Unit  | yes    |
+| Contrast               | Processing Unit  | no     |
+| Saturation             | Processing Unit  | no     |
+| Sharpness              | Processing Unit  | no     |
+| Gamma                  | Processing Unit  | no     |
+| White Balance (temp)   | Processing Unit  | no     |
+| Gain                   | Processing Unit  | no     |
+| Backlight Compensation | Processing Unit  | no     |
+| Powerline Frequency    | Processing Unit  | no     |
+| Exposure (absolute)    | Camera Terminal  | no     |
+| Focus (absolute)       | Camera Terminal  | no     |
 
-> Not all cameras support all controls. Unavailable controls will be
-> automatically greyed out.
+Not all cameras support all controls — unsupported controls are automatically hidden.
+Auto exposure and auto white balance are shown only when the camera reports support.
 
 ---
 
 ## References
 
 - [USB Video Class 1.5 Specification](https://www.usb.org/document-library/video-class-v15-document-set)
-- [CameraController](https://github.com/itaybre/CameraController) —
-  original inspiration, Objective-C + IOKit
-- [uvc-util](https://github.com/jtfrey/uvc-util) — CLI reference for
-  UVC descriptor parsing
+- [CameraController](https://github.com/itaybre/CameraController) — original inspiration, Objective-C + IOKit
+- [uvc-util](https://github.com/jtfrey/uvc-util) — CLI reference for UVC descriptor parsing
 
 ---
 
 ## Contributing
 
-> 🚧 The project is not yet ready for contributions. Once development
-> kicks off, contributions will be welcome. Feel free to open an issue
-> to share ideas or feedback in the meantime.
+Contributions are welcome. Open an issue to discuss ideas or bugs, or submit a pull request directly.
