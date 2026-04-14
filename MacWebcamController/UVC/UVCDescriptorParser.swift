@@ -62,6 +62,12 @@ enum UVCDescriptorParser {
             offset += bLength
         }
 
+        if info.processingUnitID == 0 {
+            // PU not found — dump first 120 bytes for diagnosis
+            let hexDump = data.prefix(120).map { String(format: "%02X", $0) }.joined(separator: " ")
+            print("[UVC Descriptor] PU not found. Descriptor hex: \(hexDump)")
+        }
+
         return info
     }
 

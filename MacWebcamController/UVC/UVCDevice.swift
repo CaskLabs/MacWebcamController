@@ -74,6 +74,11 @@ final class UVCDevice: @unchecked Sendable {
     // Bit positions from UVC 1.5 spec Table 4-11 (PU) and Table 4-9 (CT).
 
     func isSupported(_ control: UVCControl) -> Bool {
+        // If the camera didn't advertise any capabilities in bmControls
+        // (both masks are zero), assume all controls may be supported and
+        // let the actual USB request succeed or fail.
+        if supportedPUControls == 0 && supportedCTControls == 0 { return true }
+
         switch control {
         // Processing Unit bmControls (Table 4-11)
         case .brightness:               return supportedPUControls & (1 << 0)  != 0  // D0

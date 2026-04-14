@@ -69,20 +69,30 @@ final class CameraViewModel {
                 continue
             }
 
+            // Try to get minimum first — if this fails the control is truly unsupported.
+            let minimum: Int
             do {
-                let range = try device.getRange(for: control)
-                state.minimum      = range.minimum
-                state.maximum      = range.maximum
-                state.resolution   = max(1, range.resolution)
-                state.defaultValue = range.defaultValue
-
-                state.currentValue = try device.getValue(for: control)
+                minimum = try device.getValue(for: control, request: .getMinimum)
             } catch {
                 state.isSupported = false
-                state.error = error.localizedDescription
-                print("[UVC] Failed to read \(control.displayName): \(error)")
+                print("[UVC] \(control.displayName) not supported (GET_MIN failed): \(error)")
+                updated[control] = state
+                continue
             }
 
+            // GET_MAX, GET_RES, GET_DEF — use fallbacks if individual requests fail.
+            let maximum      = (try? device.getValue(for: control, request: .getMaximum)) ?? minimum + 100
+            let resolution   = (try? device.getValue(for: control, request: .getResolution)) ?? 1
+            let defaultValue = (try? device.getValue(for: control, request: .getDefault)) ?? ((minimum + maximum) / 2)
+            let current      = (try? device.getValue(for: control)) ?? defaultValue
+
+            state.minimum      = minimum
+            state.maximum      = maximum
+            state.resolution   = max(1, resolution)
+            state.defaultValue = defaultValue
+            state.currentValue = current
+
+            print("[UVC] \(control.displayName): min=\(minimum) max=\(maximum) cur=\(current)")
             updated[control] = state
         }
 
