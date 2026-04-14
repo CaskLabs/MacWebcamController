@@ -5,6 +5,7 @@ struct MenuBarView: View {
     @Environment(CameraManager.self) private var cameraManager
     @Environment(CameraViewModel.self) private var viewModel
     @Environment(\.openWindow) private var openWindow
+    @AppStorage("menuBarPreviewEnabled") private var menuBarPreviewEnabled: Bool = true
 
     // Controls shown in the compact popover
     private let quickControls: [UVCControl] = [
@@ -14,6 +15,13 @@ struct MenuBarView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             CameraPickerView()
+
+            if menuBarPreviewEnabled && viewModel.selectedCamera != nil {
+                CameraPreviewView(cameraID: viewModel.selectedCamera?.id)
+                    .aspectRatio(16 / 9, contentMode: .fit)
+                    .background(.black)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
 
             if viewModel.isLoading {
                 HStack {
