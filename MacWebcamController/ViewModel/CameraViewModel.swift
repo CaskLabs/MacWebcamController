@@ -258,6 +258,18 @@ final class CameraViewModel {
         }
     }
 
+    func updatePreset(_ preset: CameraPreset) {
+        guard let cameraID = selectedCamera?.id,
+              let index = presets.firstIndex(where: { $0.id == preset.id }) else { return }
+        let values = controls.reduce(into: [String: Int]()) { dict, pair in
+            if pair.value.isSupported { dict[pair.key.rawValue] = pair.value.currentValue }
+        }
+        presets[index].values = values
+        presets[index].autoExposureEnabled = autoExposureSupported ? autoExposureEnabled : nil
+        presets[index].whiteBalanceAutoEnabled = whiteBalanceAutoSupported ? whiteBalanceAutoEnabled : nil
+        SettingsPersistence().savePresets(presets, cameraID: cameraID)
+    }
+
     func deletePreset(_ preset: CameraPreset) {
         guard let cameraID = selectedCamera?.id else { return }
         presets.removeAll { $0.id == preset.id }

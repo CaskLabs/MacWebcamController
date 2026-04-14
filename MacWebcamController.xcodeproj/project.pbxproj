@@ -28,6 +28,7 @@
 		A100000019 /* SettingsPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000022; };
 		A100000020 /* UVCControlProber.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000023; };
 		A100000021 /* CameraPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000024; };
+		A100000022 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000025; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -48,6 +49,7 @@
 		B100000022 /* SettingsPersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsPersistence.swift; sourceTree = "<group>"; };
 		B100000023 /* UVCControlProber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UVCControlProber.swift; sourceTree = "<group>"; };
 		B100000024 /* CameraPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraPreviewView.swift; sourceTree = "<group>"; };
+		B100000025 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		B100000014 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		B100000015 /* MacWebcamController.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MacWebcamController.entitlements; sourceTree = "<group>"; };
 		B100000016 /* UVCConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UVCConstants.swift; sourceTree = "<group>"; };
@@ -104,6 +106,7 @@
 				B100000004 /* ControlSliderView.swift */,
 				B100000005 /* CameraPickerView.swift */,
 				B100000024 /* CameraPreviewView.swift */,
+				B100000025 /* SettingsView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -251,6 +254,7 @@
 				A100000019 /* SettingsPersistence.swift in Sources */,
 				A100000020 /* UVCControlProber.swift in Sources */,
 				A100000021 /* CameraPreviewView.swift in Sources */,
+				A100000022 /* SettingsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

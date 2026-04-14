@@ -1,7 +1,16 @@
 import SwiftUI
 
+private class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        let raw = UserDefaults.standard.string(forKey: "appearanceMode") ?? ""
+        let mode = AppearanceMode(rawValue: raw) ?? .system
+        mode.apply()
+    }
+}
+
 @main
 struct MacWebcamControllerApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var cameraManager = CameraManager()
     @State private var viewModel = CameraViewModel()
 
@@ -25,6 +34,10 @@ struct MacWebcamControllerApp: App {
                 }
         }
         .defaultSize(width: 420, height: 600)
+
+        Settings {
+            SettingsView()
+        }
     }
 
     /// Deselects the current camera if it was disconnected.

@@ -35,7 +35,7 @@ struct MainWindowView: View {
                 Divider()
 
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 20, pinnedViews: []) {
+                    LazyVStack(alignment: .leading, spacing: 12, pinnedViews: []) {
                         ControlSection(title: "Image", controls: [
                             .brightness, .contrast, .saturation, .sharpness, .gamma
                         ])
@@ -61,6 +61,63 @@ struct MainWindowView: View {
     }
 }
 
+// MARK: - Collapsible Section
+
+private struct CollapsibleSection<Trailing: View, Content: View>: View {
+    let title: String
+    @State private var isExpanded: Bool = true
+    let trailing: Trailing
+    let content: Content
+
+    init(
+        title: String,
+        @ViewBuilder trailing: () -> Trailing,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.title = title
+        self.trailing = trailing()
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    isExpanded.toggle()
+                }
+            } label: {
+                HStack {
+                    Text(title)
+                        .font(.headline)
+                    Spacer()
+                    trailing
+                    Image(systemName: "chevron.down")
+                        .imageScale(.small)
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(isExpanded ? 0 : -90))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.borderless)
+
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 8) {
+                    content
+                }
+                .padding(.top, 10)
+            }
+        }
+        .padding()
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+extension CollapsibleSection where Trailing == EmptyView {
+    init(title: String, @ViewBuilder content: () -> Content) {
+        self.init(title: title, trailing: { EmptyView() }, content: content)
+    }
+}
+
 // MARK: - Control Section
 
 private struct ControlSection: View {
@@ -70,15 +127,9 @@ private struct ControlSection: View {
     @Environment(CameraViewModel.self) private var viewModel
 
     var body: some View {
-        let supported = controls.filter { viewModel.controls[$0]?.isSupported == true }
-        let unsupported = controls.filter { viewModel.controls[$0]?.isSupported == false }
-
-        if !supported.isEmpty || !unsupported.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(title)
-                    .font(.headline)
-                    .padding(.bottom, 2)
-
+        let visible = controls.filter { viewModel.controls[$0] != nil }
+        if !visible.isEmpty {
+            CollapsibleSection(title: title) {
                 ForEach(controls) { control in
                     if let state = viewModel.controls[control] {
                         ControlSliderView(control: control, state: state) { value in
@@ -87,8 +138,6 @@ private struct ControlSection: View {
                     }
                 }
             }
-            .padding()
-            .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
         }
     }
 }
@@ -105,11 +154,7 @@ private struct ExposureSection: View {
         let hasAuto = viewModel.autoExposureSupported
 
         if hasExposure || hasGain || hasBacklight || hasAuto {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Exposure & Gain")
-                    .font(.headline)
-                    .padding(.bottom, 2)
-
+            CollapsibleSection(title: "Exposure & Gain") {
                 if hasAuto {
                     Toggle("Auto Exposure", isOn: Binding(
                         get: { viewModel.autoExposureEnabled },
@@ -137,8 +182,6 @@ private struct ExposureSection: View {
                     }
                 }
             }
-            .padding()
-            .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
         }
     }
 }
@@ -153,11 +196,7 @@ private struct WhiteBalanceSection: View {
         let hasAuto = viewModel.whiteBalanceAutoSupported
 
         if hasWB || hasAuto {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("White Balance")
-                    .font(.headline)
-                    .padding(.bottom, 2)
-
+            CollapsibleSection(title: "White Balance") {
                 if hasAuto {
                     Toggle("Auto White Balance", isOn: Binding(
                         get: { viewModel.whiteBalanceAutoEnabled },
@@ -173,8 +212,29 @@ private struct WhiteBalanceSection: View {
                     .opacity(viewModel.whiteBalanceAutoEnabled ? 0.4 : 1.0)
                 }
             }
-            .padding()
-            .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+        }
+    }
+}
+
+// MARK: - Anti-Flicker (Powerline Frequency) Section
+
+private struct AntiFlickerSection: View {
+    @Environment(CameraViewModel.self) private var viewModel
+
+    var body: some View {
+        if let state = viewModel.controls[.powerlineFrequency], state.isSupported {
+            CollapsibleSection(title: "Anti-Flicker") {
+                Picker("Powerline Frequency", selection: Binding(
+                    get: { state.currentValue },
+                    set: { viewModel.setValue($0, for: .powerlineFrequency) }
+                )) {
+                    Text("Disabled").tag(0)
+                    Text("50 Hz").tag(1)
+                    Text("60 Hz").tag(2)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+            }
         }
     }
 }
@@ -187,53 +247,52 @@ private struct PresetsSection: View {
     @State private var showingNameField: Bool = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Presets")
-                    .font(.headline)
-                Spacer()
+        CollapsibleSection(
+            title: "Presets",
+            trailing: {
                 Button {
                     showingNameField.toggle()
                     newPresetName = ""
                 } label: {
                     Image(systemName: "plus")
+                        .imageScale(.small)
                 }
                 .buttonStyle(.borderless)
-            }
-            .padding(.bottom, 2)
+                .foregroundStyle(.secondary)
+            },
+            content: {
+                if showingNameField {
+                    HStack {
+                        TextField("Preset name", text: $newPresetName)
+                            .textFieldStyle(.roundedBorder)
+                            .onSubmit { savePreset() }
 
-            if showingNameField {
-                HStack {
-                    TextField("Preset name", text: $newPresetName)
-                        .textFieldStyle(.roundedBorder)
-                        .onSubmit { savePreset() }
+                        Button("Save") { savePreset() }
+                            .disabled(newPresetName.trimmingCharacters(in: .whitespaces).isEmpty)
 
-                    Button("Save") { savePreset() }
-                        .disabled(newPresetName.trimmingCharacters(in: .whitespaces).isEmpty)
-
-                    Button("Cancel") {
-                        showingNameField = false
-                        newPresetName = ""
+                        Button("Cancel") {
+                            showingNameField = false
+                            newPresetName = ""
+                        }
+                        .buttonStyle(.borderless)
+                        .foregroundStyle(.secondary)
                     }
-                    .buttonStyle(.borderless)
-                    .foregroundStyle(.secondary)
+                }
+
+                if viewModel.presets.isEmpty && !showingNameField {
+                    Text("No saved presets.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    PresetList(
+                        presets: viewModel.presets,
+                        onApply: { viewModel.applyPreset($0) },
+                        onUpdate: { viewModel.updatePreset($0) },
+                        onDelete: { viewModel.deletePreset($0) }
+                    )
                 }
             }
-
-            if viewModel.presets.isEmpty && !showingNameField {
-                Text("No saved presets.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else {
-                PresetList(
-                    presets: viewModel.presets,
-                    onApply: { viewModel.applyPreset($0) },
-                    onDelete: { viewModel.deletePreset($0) }
-                )
-            }
-        }
-        .padding()
-        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+        )
     }
 
     private func savePreset() {
@@ -250,6 +309,7 @@ private struct PresetsSection: View {
 private struct PresetRow: View {
     let name: String
     let onApply: () -> Void
+    let onUpdate: () -> Void
     let onDelete: () -> Void
 
     var body: some View {
@@ -260,9 +320,12 @@ private struct PresetRow: View {
             Button("Apply", action: onApply)
                 .buttonStyle(.borderless)
                 .foregroundStyle(Color.accentColor)
-            Button("Delete", action: onDelete)
+            Button("Update", action: onUpdate)
                 .buttonStyle(.borderless)
                 .foregroundStyle(.secondary)
+            Button("Delete", action: onDelete)
+                .buttonStyle(.borderless)
+                .foregroundStyle(.red)
         }
         .padding(.vertical, 4)
     }
@@ -273,47 +336,19 @@ private struct PresetRow: View {
 private struct PresetList: View {
     let presets: [CameraPreset]
     let onApply: (CameraPreset) -> Void
+    let onUpdate: (CameraPreset) -> Void
     let onDelete: (CameraPreset) -> Void
 
     var body: some View {
-        let count = presets.count
-        return VStack(spacing: 0) {
-            ForEach(0..<count) { i in
+        VStack(spacing: 0) {
+            ForEach(presets, id: \CameraPreset.id) { preset in
                 PresetRow(
-                    name: presets[i].name,
-                    onApply: { onApply(presets[i]) },
-                    onDelete: { onDelete(presets[i]) }
+                    name: preset.name,
+                    onApply: { onApply(preset) },
+                    onUpdate: { onUpdate(preset) },
+                    onDelete: { onDelete(preset) }
                 )
             }
-        }
-    }
-}
-
-// MARK: - Anti-Flicker (Powerline Frequency) Section
-
-private struct AntiFlickerSection: View {
-    @Environment(CameraViewModel.self) private var viewModel
-
-    var body: some View {
-        if let state = viewModel.controls[.powerlineFrequency], state.isSupported {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Anti-Flicker")
-                    .font(.headline)
-                    .padding(.bottom, 2)
-
-                Picker("Powerline Frequency", selection: Binding(
-                    get: { state.currentValue },
-                    set: { viewModel.setValue($0, for: .powerlineFrequency) }
-                )) {
-                    Text("Disabled").tag(0)
-                    Text("50 Hz").tag(1)
-                    Text("60 Hz").tag(2)
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-            }
-            .padding()
-            .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
         }
     }
 }
