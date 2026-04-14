@@ -17,7 +17,7 @@ struct MenuBarView: View {
             CameraPickerView()
 
             if menuBarPreviewEnabled && viewModel.selectedCamera != nil {
-                CameraPreviewView(cameraID: viewModel.selectedCamera?.id)
+                CameraPreviewView(session: cameraManager.previewSession)
                     .aspectRatio(16 / 9, contentMode: .fit)
                     .background(.black)
                     .clipShape(RoundedRectangle(cornerRadius: 6))
