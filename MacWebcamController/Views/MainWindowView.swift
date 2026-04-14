@@ -43,6 +43,7 @@ struct MainWindowView: View {
                         ControlSection(title: "Focus", controls: [.focusAbsolute])
                         WhiteBalanceSection()
                         AntiFlickerSection()
+                        PresetsSection()
                     }
                     .padding()
                 }
@@ -174,6 +175,116 @@ private struct WhiteBalanceSection: View {
             }
             .padding()
             .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+        }
+    }
+}
+
+// MARK: - Presets Section
+
+private struct PresetsSection: View {
+    @Environment(CameraViewModel.self) private var viewModel
+    @State private var newPresetName: String = ""
+    @State private var showingNameField: Bool = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Presets")
+                    .font(.headline)
+                Spacer()
+                Button {
+                    showingNameField.toggle()
+                    newPresetName = ""
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .buttonStyle(.borderless)
+            }
+            .padding(.bottom, 2)
+
+            if showingNameField {
+                HStack {
+                    TextField("Preset name", text: $newPresetName)
+                        .textFieldStyle(.roundedBorder)
+                        .onSubmit { savePreset() }
+
+                    Button("Save") { savePreset() }
+                        .disabled(newPresetName.trimmingCharacters(in: .whitespaces).isEmpty)
+
+                    Button("Cancel") {
+                        showingNameField = false
+                        newPresetName = ""
+                    }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(.secondary)
+                }
+            }
+
+            if viewModel.presets.isEmpty && !showingNameField {
+                Text("No saved presets.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                PresetList(
+                    presets: viewModel.presets,
+                    onApply: { viewModel.applyPreset($0) },
+                    onDelete: { viewModel.deletePreset($0) }
+                )
+            }
+        }
+        .padding()
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func savePreset() {
+        let name = newPresetName.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else { return }
+        viewModel.savePreset(name: name)
+        showingNameField = false
+        newPresetName = ""
+    }
+}
+
+// MARK: - Preset Row
+
+private struct PresetRow: View {
+    let name: String
+    let onApply: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        HStack {
+            Text(name)
+                .lineLimit(1)
+            Spacer()
+            Button("Apply", action: onApply)
+                .buttonStyle(.borderless)
+                .foregroundStyle(Color.accentColor)
+            Button("Delete", action: onDelete)
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+// MARK: - Preset List
+
+private struct PresetList: View {
+    let presets: [CameraPreset]
+    let onApply: (CameraPreset) -> Void
+    let onDelete: (CameraPreset) -> Void
+
+    var body: some View {
+        let count = presets.count
+        return VStack(spacing: 0) {
+            ForEach(0..<count) { i in
+                PresetRow(
+                    name: presets[i].name,
+                    onApply: { onApply(presets[i]) },
+                    onDelete: { onDelete(presets[i]) }
+                )
+            }
         }
     }
 }

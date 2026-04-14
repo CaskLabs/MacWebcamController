@@ -1,5 +1,27 @@
 import Foundation
 
+// MARK: - Camera Preset
+
+struct CameraPreset: Codable, Identifiable {
+    var id: UUID
+    var name: String
+    var values: [String: Int]  // UVCControl.rawValue → Int
+    var autoExposureEnabled: Bool?
+    var whiteBalanceAutoEnabled: Bool?
+
+    init(name: String, values: [String: Int],
+         autoExposureEnabled: Bool? = nil,
+         whiteBalanceAutoEnabled: Bool? = nil) {
+        self.id = UUID()
+        self.name = name
+        self.values = values
+        self.autoExposureEnabled = autoExposureEnabled
+        self.whiteBalanceAutoEnabled = whiteBalanceAutoEnabled
+    }
+}
+
+// MARK: - Settings Persistence
+
 /// Saves and restores per-camera UVC control values using UserDefaults.
 /// Key format: "camera.<uniqueID>.<control.rawValue>"
 struct SettingsPersistence {
@@ -39,5 +61,21 @@ struct SettingsPersistence {
         for control in UVCControl.allCases {
             defaults.removeObject(forKey: key(for: control, cameraID: cameraID))
         }
+    }
+
+    // MARK: - Named Presets
+
+    private func presetsKey(for cameraID: String) -> String { "presets.\(cameraID)" }
+
+    func loadPresets(cameraID: String) -> [CameraPreset] {
+        guard let data = defaults.data(forKey: presetsKey(for: cameraID)),
+              let presets = try? JSONDecoder().decode([CameraPreset].self, from: data)
+        else { return [] }
+        return presets
+    }
+
+    func savePresets(_ presets: [CameraPreset], cameraID: String) {
+        guard let data = try? JSONEncoder().encode(presets) else { return }
+        defaults.set(data, forKey: presetsKey(for: cameraID))
     }
 }

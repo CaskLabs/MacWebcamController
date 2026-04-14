@@ -18,6 +18,9 @@ final class CameraViewModel {
     var whiteBalanceAutoEnabled: Bool = false
     var whiteBalanceAutoSupported: Bool = false
 
+    // Presets
+    var presets: [CameraPreset] = []
+
     private let ioQueue = DispatchQueue(label: "com.macwebcamcontroller.uvc", qos: .userInitiated)
 
     init() {
@@ -35,6 +38,8 @@ final class CameraViewModel {
         autoExposureSupported = false
         whiteBalanceAutoEnabled = false
         whiteBalanceAutoSupported = false
+
+        presets = SettingsPersistence().loadPresets(cameraID: camera?.id ?? "")
 
         guard let camera, let device = camera.uvcDevice else {
             print("[ViewModel] selectCamera: no UVC device for '\(camera?.name ?? "nil")'")
@@ -219,5 +224,43 @@ final class CameraViewModel {
         if let state = controls[control], state.isSupported {
             setValue(state.defaultValue, for: control)
         }
+    }
+
+    // MARK: - Presets
+
+    func savePreset(name: String) {
+        guard let cameraID = selectedCamera?.id else { return }
+        let values = controls.compactMapValues { state -> Int? in
+            state.isSupported ? state.currentValue : nil
+        }.reduce(into: [String: Int]()) { dict, pair in
+            dict[pair.key.rawValue] = pair.value
+        }
+        let preset = CameraPreset(
+            name: name,
+            values: values,
+            autoExposureEnabled: autoExposureSupported ? autoExposureEnabled : nil,
+            whiteBalanceAutoEnabled: whiteBalanceAutoSupported ? whiteBalanceAutoEnabled : nil
+        )
+        presets.append(preset)
+        SettingsPersistence().savePresets(presets, cameraID: cameraID)
+    }
+
+    func applyPreset(_ preset: CameraPreset) {
+        for (rawValue, value) in preset.values {
+            guard let control = UVCControl(rawValue: rawValue) else { continue }
+            setValue(value, for: control)
+        }
+        if let ae = preset.autoExposureEnabled, autoExposureSupported {
+            setAutoExposure(ae)
+        }
+        if let wb = preset.whiteBalanceAutoEnabled, whiteBalanceAutoSupported {
+            setWhiteBalanceAuto(wb)
+        }
+    }
+
+    func deletePreset(_ preset: CameraPreset) {
+        guard let cameraID = selectedCamera?.id else { return }
+        presets.removeAll { $0.id == preset.id }
+        SettingsPersistence().savePresets(presets, cameraID: cameraID)
     }
 }
