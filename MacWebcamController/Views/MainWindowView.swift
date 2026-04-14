@@ -55,7 +55,7 @@ struct MainWindowView: View {
                             .brightness, .contrast, .saturation, .sharpness, .gamma
                         ])
                         ExposureSection()
-                        ControlSection(title: "Focus", controls: [.focusAbsolute])
+                        FocusSection()
                         WhiteBalanceSection()
                         AntiFlickerSection()
                         PresetsSection()
@@ -225,6 +225,36 @@ private struct WhiteBalanceSection: View {
                     }
                     .disabled(viewModel.whiteBalanceAutoEnabled)
                     .opacity(viewModel.whiteBalanceAutoEnabled ? 0.4 : 1.0)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Focus Section (with Auto toggle)
+
+private struct FocusSection: View {
+    @Environment(CameraViewModel.self) private var viewModel
+
+    var body: some View {
+        let hasFocus = viewModel.controls[.focusAbsolute]?.isSupported == true
+        let hasAuto = viewModel.focusAutoSupported
+
+        if hasFocus || hasAuto {
+            CollapsibleSection(title: "Focus") {
+                if hasAuto {
+                    Toggle("Auto Focus", isOn: Binding(
+                        get: { viewModel.focusAutoEnabled },
+                        set: { viewModel.setFocusAuto($0) }
+                    ))
+                }
+
+                if hasFocus, let state = viewModel.controls[.focusAbsolute] {
+                    ControlSliderView(control: .focusAbsolute, state: state) { value in
+                        viewModel.setValue(value, for: .focusAbsolute)
+                    }
+                    .disabled(viewModel.focusAutoEnabled)
+                    .opacity(viewModel.focusAutoEnabled ? 0.4 : 1.0)
                 }
             }
         }

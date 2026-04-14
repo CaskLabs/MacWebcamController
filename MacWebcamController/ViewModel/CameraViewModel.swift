@@ -17,6 +17,8 @@ final class CameraViewModel {
     var autoExposureSupported: Bool = false
     var whiteBalanceAutoEnabled: Bool = false
     var whiteBalanceAutoSupported: Bool = false
+    var focusAutoEnabled: Bool = false
+    var focusAutoSupported: Bool = false
 
     // Presets
     var presets: [CameraPreset] = []
@@ -38,6 +40,8 @@ final class CameraViewModel {
         autoExposureSupported = false
         whiteBalanceAutoEnabled = false
         whiteBalanceAutoSupported = false
+        focusAutoEnabled = false
+        focusAutoSupported = false
 
         presets = SettingsPersistence().loadPresets(cameraID: camera?.id ?? "")
 
@@ -144,6 +148,12 @@ final class CameraViewModel {
             wbAutoEnabled = (try? device.getWhiteBalanceAuto()) ?? false
         }
 
+        let focusAutoSupported = device.isFocusAutoSupported
+        var focusAutoEnabled = false
+        if focusAutoSupported {
+            focusAutoEnabled = (try? device.getFocusAuto()) ?? false
+        }
+
         let finalControls = updated
         Task { @MainActor in
             self.controls = finalControls
@@ -151,6 +161,8 @@ final class CameraViewModel {
             self.autoExposureEnabled = aeEnabled
             self.whiteBalanceAutoSupported = wbAutoSupported
             self.whiteBalanceAutoEnabled = wbAutoEnabled
+            self.focusAutoSupported = focusAutoSupported
+            self.focusAutoEnabled = focusAutoEnabled
             self.isLoading = false
         }
     }
@@ -210,6 +222,20 @@ final class CameraViewModel {
             } catch {
                 print("[UVC] setWhiteBalanceAuto failed: \(error)")
                 Task { @MainActor in self?.whiteBalanceAutoEnabled = !enabled }
+            }
+        }
+    }
+
+    func setFocusAuto(_ enabled: Bool) {
+        guard let device = selectedCamera?.uvcDevice, focusAutoSupported else { return }
+        focusAutoEnabled = enabled
+
+        ioQueue.async { [weak self] in
+            do {
+                try device.setFocusAuto(enabled)
+            } catch {
+                print("[UVC] setFocusAuto failed: \(error)")
+                Task { @MainActor in self?.focusAutoEnabled = !enabled }
             }
         }
     }

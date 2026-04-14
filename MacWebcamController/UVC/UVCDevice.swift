@@ -104,6 +104,9 @@ final class UVCDevice: @unchecked Sendable {
     /// Whether the camera supports White Balance Temperature Auto (PU bmControls D12).
     var isWhiteBalanceAutoSupported: Bool { supportedPUControls & (1 << 12) != 0 }
 
+    /// Whether the camera supports Focus Auto (CT bmControls D6).
+    var isFocusAutoSupported: Bool { supportedCTControls & (1 << 6) != 0 }
+
     // MARK: - Core Control Request
 
     /// Sends a raw UVC class-specific control request on the device's default control endpoint.
@@ -236,6 +239,36 @@ final class UVCDevice: @unchecked Sendable {
                         wValue: wValue, wIndex: wIndex, data: data)
         } catch {
             throw UVCDeviceError.rawRequestFailed("SET_CUR Auto Exposure Mode", error)
+        }
+    }
+
+    // MARK: - Focus Auto (CT selector 0x08)
+
+    func getFocusAuto() throws -> Bool {
+        let wValue = UInt16(0x08) << 8  // CT_FOCUS_AUTO_CONTROL
+        let wIndex = (UInt16(cameraTerminalID) << 8) | UInt16(vcInterfaceNumber)
+        let data = NSMutableData(length: 1) ?? NSMutableData()
+        do {
+            try sendRaw(bmRequestType: UVCRequest.getCurrent.bmRequestType,
+                        bRequest: UVCRequest.getCurrent.rawValue,
+                        wValue: wValue, wIndex: wIndex, data: data)
+        } catch {
+            throw UVCDeviceError.rawRequestFailed("GET_CUR Focus Auto", error)
+        }
+        return data.bytes.bindMemory(to: UInt8.self, capacity: 1).pointee != 0
+    }
+
+    func setFocusAuto(_ enabled: Bool) throws {
+        let wValue = UInt16(0x08) << 8
+        let wIndex = (UInt16(cameraTerminalID) << 8) | UInt16(vcInterfaceNumber)
+        let data = NSMutableData(length: 1) ?? NSMutableData()
+        data.mutableBytes.initializeMemory(as: UInt8.self, repeating: enabled ? 1 : 0, count: 1)
+        do {
+            try sendRaw(bmRequestType: UVCRequest.setCurrent.bmRequestType,
+                        bRequest: UVCRequest.setCurrent.rawValue,
+                        wValue: wValue, wIndex: wIndex, data: data)
+        } catch {
+            throw UVCDeviceError.rawRequestFailed("SET_CUR Focus Auto", error)
         }
     }
 
