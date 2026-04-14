@@ -221,6 +221,10 @@ enum UVCDeviceDiscovery {
     private static func ioClassName(_ entry: io_object_t) -> String {
         var buf = [CChar](repeating: 0, count: 256)
         IOObjectGetClass(entry, &buf)
-        return String(cString: buf)
+        return buf.withUnsafeBytes { ptr in
+            let bytes = ptr.bindMemory(to: UInt8.self)
+            let end = bytes.firstIndex(of: 0) ?? bytes.endIndex
+            return String(decoding: bytes[..<end], as: UTF8.self)
+        }
     }
 }

@@ -43,8 +43,9 @@ final class CameraViewModel {
 
         print("[ViewModel] selectCamera: '\(camera.name)' PU:\(device.processingUnitID) CT:\(device.cameraTerminalID) puControls:0x\(String(device.supportedPUControls, radix: 16)) ctControls:0x\(String(device.supportedCTControls, radix: 16))")
         isLoading = true
+        let cameraID = camera.id
         ioQueue.async { [weak self] in
-            self?.loadControls(from: device, cameraID: camera.id)
+            self?.loadControls(from: device, cameraID: cameraID)
         }
     }
 
@@ -57,7 +58,7 @@ final class CameraViewModel {
     }
 
     /// Reads all control values and ranges from the UVC device (runs on ioQueue).
-    private func loadControls(from device: UVCDevice, cameraID: String) {
+    nonisolated private func loadControls(from device: UVCDevice, cameraID: String) {
         var updated: [UVCControl: ControlState] = [:]
 
         for control in UVCControl.allCases {
@@ -156,11 +157,12 @@ final class CameraViewModel {
         // Optimistic UI update
         controls[control]?.currentValue = value
 
+        let cameraID = selectedCamera?.id
         ioQueue.async { [weak self] in
             do {
                 try device.setValue(value, for: control)
                 print("[UVC] SET_CUR \(control.displayName) = \(value) OK")
-                if let cameraID = self?.selectedCamera?.id {
+                if let cameraID {
                     SettingsPersistence().save(value: value, for: control, cameraID: cameraID)
                 }
             } catch {

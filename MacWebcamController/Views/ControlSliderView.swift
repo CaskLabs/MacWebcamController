@@ -1,13 +1,11 @@
 import SwiftUI
-import Combine
 
 struct ControlSliderView: View {
     let control: UVCControl
     let state: ControlState
     var onValueChanged: (Int) -> Void
 
-    // Debounced publisher so rapid slider drags don't flood the USB bus
-    @State private var debounceTimer: Timer?
+    @State private var debounceTask: Task<Void, Never>?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -25,8 +23,6 @@ struct ControlSliderView: View {
                 Slider(
                     value: Binding(
                         get: { Double(state.currentValue) },
-                        // Always move at step 1 for smooth dragging; snap to
-                        // the camera's resolution step before sending.
                         set: { newVal in
                             let res = max(1, state.resolution)
                             let snapped = (Int(newVal.rounded()) / res) * res
@@ -51,9 +47,12 @@ struct ControlSliderView: View {
         .opacity(state.isSupported ? 1.0 : 0.4)
     }
 
+    @MainActor
     private func scheduleUpdate(_ value: Int) {
-        debounceTimer?.invalidate()
-        debounceTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: false) { _ in
+        debounceTask?.cancel()
+        debounceTask = Task {
+            try? await Task.sleep(for: .milliseconds(50))
+            guard !Task.isCancelled else { return }
             onValueChanged(value)
         }
     }

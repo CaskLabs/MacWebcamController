@@ -1,5 +1,5 @@
+@preconcurrency import AVFoundation
 import SwiftUI
-import AVFoundation
 
 /// Live video preview for a selected camera using AVCaptureSession.
 /// Wraps AVCaptureVideoPreviewLayer in an NSView.
@@ -18,10 +18,11 @@ struct CameraPreviewView: NSViewRepresentable {
 
 // MARK: - NSView
 
-final class CameraPreviewNSView: NSView {
+final class CameraPreviewNSView: NSView, @unchecked Sendable {
     private let session = AVCaptureSession()
     private let previewLayer = AVCaptureVideoPreviewLayer()
     private var currentDeviceID: String?
+    private let sessionQueue = DispatchQueue(label: "com.macwebcamcontroller.preview")
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -47,31 +48,31 @@ final class CameraPreviewNSView: NSView {
     }
 
     func updateDevice(_ device: AVCaptureDevice?) {
-        // Avoid restarting if device hasn't changed
         guard device?.uniqueID != currentDeviceID else { return }
         currentDeviceID = device?.uniqueID
 
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self else { return }
+        // Capture only the uniqueID string (Sendable) — not AVCaptureDevice itself
+        let deviceID = device?.uniqueID
+        let session = self.session
 
-            self.session.beginConfiguration()
-            self.session.inputs.forEach { self.session.removeInput($0) }
+        sessionQueue.async {
+            session.beginConfiguration()
+            session.inputs.forEach { session.removeInput($0) }
 
-            if let device,
-               let input = try? AVCaptureDeviceInput(device: device),
-               self.session.canAddInput(input) {
-                self.session.addInput(input)
+            if let id = deviceID,
+               let dev = AVCaptureDevice(uniqueID: id),
+               let input = try? AVCaptureDeviceInput(device: dev),
+               session.canAddInput(input) {
+                session.addInput(input)
             }
 
-            self.session.commitConfiguration()
+            session.commitConfiguration()
 
-            if device != nil {
-                if !self.session.isRunning { self.session.startRunning() }
+            if deviceID != nil {
+                if !session.isRunning { session.startRunning() }
             } else {
-                self.session.stopRunning()
+                session.stopRunning()
             }
         }
     }
-
-    // Session cleanup happens automatically when the view is released.
 }
