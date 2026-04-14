@@ -61,7 +61,7 @@ struct MenuBarView: View {
 
                 Spacer()
 
-                Button(action: { openWindow(id: "com_apple_SwiftUI_Settings_Main"); NSApp.activate(ignoringOtherApps: true) }) {
+                Button(action: { NSApp.activate(ignoringOtherApps: true); NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil) }) {
                     Image(systemName: "gear")
                 }
                 .buttonStyle(.borderless)
