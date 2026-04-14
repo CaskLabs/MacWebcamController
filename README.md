@@ -12,17 +12,13 @@ directly from your menu bar or a full standalone window.
 
 ## Features
 
-- 📷 **Supports any UVC-compliant USB camera**
-- 🎛️ **Full UVC control surface** — brightness, contrast, saturation, sharpness, gamma, white balance, gain, exposure, focus, backlight compensation, and anti-flicker (powerline frequency)
-- 🎥 **Live camera preview** — 16:9 preview directly in the control window
-- 🖥️ **Menu bar mode** — quick access to the 5 most-used controls via a compact popover
-- 🪟 **Standalone window mode** — all controls in a dedicated window, grouped in collapsible sections
-- 🤖 **Auto exposure & auto white balance toggles** — with manual sliders automatically disabled when auto mode is active
-- 💾 **Camera presets** — save, apply, update, and delete named presets per camera
-- 🔄 **Per-camera settings persistence** — remembers your settings per device across restarts
-- 🌗 **Appearance settings** — choose System, Light, or Dark mode
-- 🚀 **Launch at Login** — optional auto-start via `SMAppService`
-- 🐳 **Dynamic dock icon** — shown only when the control window is open
+- 📷 **Supports any UVC-compliant USB camera** with 🎛️ **full UVC control surface**
+- 🎥 **Live camera preview**
+- 🖥️ **Menu bar mode** and 🪟 **Standalone window mode**
+- 🤖 **Auto exposure & auto white balance toggles**
+- 💾 **Camera presets**
+- 🔄 **Per-camera settings persistence**
+- 🚀 **Launch at Login**
 - 🍎 **Native macOS app** — built with SwiftUI + AppKit, no external dependencies
 - ⚡ **Designed for Apple Silicon** — arm64, macOS 26+
 
@@ -47,6 +43,8 @@ Build from source using Xcode:
 4. Build and run (⌘R)
 
 No additional configuration is needed — the app has the sandbox disabled to allow direct IOKit USB access.
+
+Later on it might be available through Homebrew.
 
 ---
 
@@ -128,7 +126,9 @@ Auto exposure and auto white balance are shown only when the camera reports supp
 
 ## Planned / TODO
 
+- [ ] **First Release**
 - [ ] **Live preview in menu bar popover** — show a 16:9 camera preview directly in the compact popover. Blocked by a macOS AVFoundation limitation: two `AVCaptureSession` instances cannot capture the same device simultaneously. Requires sharing a single session between the menu bar and main window previews, which needs further investigation.
+- [ ] **iCloud Sync Settings** (optional)
 
 ---
 
