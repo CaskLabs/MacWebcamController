@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct MenuBarView: View {
@@ -54,6 +55,7 @@ struct MenuBarView: View {
             HStack {
                 Button("Open Full Controls") {
                     openWindow(id: "main")
+                    NSApp.activate(ignoringOtherApps: true)
                 }
                 .buttonStyle(.borderless)
 
