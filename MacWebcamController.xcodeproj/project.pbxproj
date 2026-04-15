@@ -7,28 +7,28 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		A100000001 /* MacWebcamControllerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000001; };
-		A100000002 /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000002; };
-		A100000003 /* MainWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000003; };
-		A100000004 /* ControlSliderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000004; };
-		A100000005 /* CameraPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000005; };
-		A100000006 /* UVCControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000006; };
-		A100000007 /* CameraManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000007; };
-		A100000008 /* CameraInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000008; };
-		A100000009 /* CameraViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000009; };
-		A100000010 /* ControlState.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000010; };
-		A100000011 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B100000011; };
-		A100000012 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B100000012; };
-		A100000013 /* IOKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B100000013; };
-		A100000018 /* IOUSBHost.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B100000021; };
-		A100000014 /* UVCConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000016; };
-		A100000015 /* UVCDevice.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000017; };
-		A100000016 /* UVCDescriptorParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000018; };
-		A100000017 /* UVCDeviceDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000019; };
-		A100000019 /* SettingsPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000022; };
-		A100000020 /* UVCControlProber.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000023; };
-		A100000021 /* CameraPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000024; };
-		A100000022 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000025; };
+		A100000001 /* MacWebcamControllerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000001 /* MacWebcamControllerApp.swift */; };
+		A100000002 /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000002 /* MenuBarView.swift */; };
+		A100000003 /* MainWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000003 /* MainWindowView.swift */; };
+		A100000004 /* ControlSliderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000004 /* ControlSliderView.swift */; };
+		A100000005 /* CameraPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000005 /* CameraPickerView.swift */; };
+		A100000006 /* UVCControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000006 /* UVCControl.swift */; };
+		A100000007 /* CameraManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000007 /* CameraManager.swift */; };
+		A100000008 /* CameraInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000008 /* CameraInfo.swift */; };
+		A100000009 /* CameraViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000009 /* CameraViewModel.swift */; };
+		A100000010 /* ControlState.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000010 /* ControlState.swift */; };
+		A100000011 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B100000011 /* Assets.xcassets */; };
+		A100000012 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B100000012 /* AVFoundation.framework */; };
+		A100000013 /* IOKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B100000013 /* IOKit.framework */; };
+		A100000014 /* UVCConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000016 /* UVCConstants.swift */; };
+		A100000015 /* UVCDevice.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000017 /* UVCDevice.swift */; };
+		A100000016 /* UVCDescriptorParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000018 /* UVCDescriptorParser.swift */; };
+		A100000017 /* UVCDeviceDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000019 /* UVCDeviceDiscovery.swift */; };
+		A100000018 /* IOUSBHost.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B100000021 /* IOUSBHost.framework */; };
+		A100000019 /* SettingsPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000022 /* SettingsPersistence.swift */; };
+		A100000020 /* UVCControlProber.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000023 /* UVCControlProber.swift */; };
+		A100000021 /* CameraPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000024 /* CameraPreviewView.swift */; };
+		A100000022 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000025 /* SettingsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -45,11 +45,6 @@
 		B100000011 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B100000012 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
 		B100000013 /* IOKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = IOKit.framework; path = System/Library/Frameworks/IOKit.framework; sourceTree = SDKROOT; };
-		B100000021 /* IOUSBHost.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = IOUSBHost.framework; path = System/Library/Frameworks/IOUSBHost.framework; sourceTree = SDKROOT; };
-		B100000022 /* SettingsPersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsPersistence.swift; sourceTree = "<group>"; };
-		B100000023 /* UVCControlProber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UVCControlProber.swift; sourceTree = "<group>"; };
-		B100000024 /* CameraPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraPreviewView.swift; sourceTree = "<group>"; };
-		B100000025 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		B100000014 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		B100000015 /* MacWebcamController.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MacWebcamController.entitlements; sourceTree = "<group>"; };
 		B100000016 /* UVCConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UVCConstants.swift; sourceTree = "<group>"; };
@@ -57,6 +52,11 @@
 		B100000018 /* UVCDescriptorParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UVCDescriptorParser.swift; sourceTree = "<group>"; };
 		B100000019 /* UVCDeviceDiscovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UVCDeviceDiscovery.swift; sourceTree = "<group>"; };
 		B100000020 /* MacWebcamController.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MacWebcamController.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B100000021 /* IOUSBHost.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = IOUSBHost.framework; path = System/Library/Frameworks/IOUSBHost.framework; sourceTree = SDKROOT; };
+		B100000022 /* SettingsPersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsPersistence.swift; sourceTree = "<group>"; };
+		B100000023 /* UVCControlProber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UVCControlProber.swift; sourceTree = "<group>"; };
+		B100000024 /* CameraPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraPreviewView.swift; sourceTree = "<group>"; };
+		B100000025 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -73,7 +73,7 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		D100000001 /* Root */ = {
+		D100000001 = {
 			isa = PBXGroup;
 			children = (
 				D100000002 /* MacWebcamController */,
@@ -396,7 +396,6 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
-
 	};
 	rootObject = E100000002 /* Project object */;
 }

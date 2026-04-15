@@ -77,6 +77,7 @@ private class AppDelegate: NSObject, NSApplicationDelegate {
 
         let openItem = NSMenuItem(title: "Open Full Controls", action: #selector(openFullControls), keyEquivalent: "")
         openItem.target = self
+        openItem.image = NSImage(systemSymbolName: "slider.horizontal.3", accessibilityDescription: nil)
         menu.addItem(openItem)
 
         let settingsItem = NSMenuItem(title: "Settings", action: #selector(openSettings), keyEquivalent: "")
