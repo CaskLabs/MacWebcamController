@@ -15,9 +15,10 @@ directly from your menu bar or a full standalone window.
 - 📷 **Supports any UVC-compliant USB camera** with 🎛️ **full UVC control surface**
 - 🎥 **Live camera preview**
 - 🖥️ **Menu bar mode** and 🪟 **Standalone window mode**
-- 🤖 **Auto exposure & auto white balance toggles**
+- 🤖 **Auto exposure, auto white balance & auto focus toggles**
 - 💾 **Camera presets**
 - 🔄 **Per-camera settings persistence**
+- 🔃 **Reset all controls to device defaults** — one-click button in the menu bar and full window
 - 🚀 **Launch at Login**
 - 🍎 **Native macOS app** — built with SwiftUI + AppKit, no external dependencies
   
@@ -49,11 +50,14 @@ Later on it might be available through Homebrew.
 
 ## Usage
 
-- **Menu bar icon** — click the camera icon in the menu bar to open the compact popover with quick sliders and a camera picker
-- **Full controls** — click "Open Full Controls" in the popover to open the main window with all UVC controls
-- **Settings** — click the gear icon (or press ⌘,) in the main window to open the inline settings page
+- **Menu bar icon (left-click)** — opens the compact popover with a camera picker and quick sliders for brightness, contrast, white balance, exposure and focus. Only controls supported by the connected camera are shown.
+- **Menu bar icon (right-click)** — shows a context menu with "Open Full Controls", "Settings", and "Quit"
+- **Auto toggles** — Auto Exposure toggle appears above the exposure slider in both the popover and the full window; Auto White Balance and Auto Focus work the same way
+- **Reset button** — the ↺ button next to the camera picker in the menu bar resets all controls to device defaults
+- **Full controls** — click "Open Full Controls" (or right-click the icon) to open the main window with all UVC controls organised in collapsible sections
+- **Settings** — click the gear icon in the popover footer or the main window to open the settings page (appearance, launch at login)
 - **Presets** — in the Presets section, click + to save the current settings as a named preset; apply, update, or delete presets at any time
-- **Reset** — click "Reset All" to restore all controls to their device defaults
+- **Reset** — click "Reset" to restore all controls to their device defaults
 
 ---
 
@@ -61,7 +65,7 @@ Later on it might be available through Homebrew.
 
 ```
 MacWebcamController/
-├── MacWebcamControllerApp.swift   # App entry point, AppDelegate, dock icon management
+├── MacWebcamControllerApp.swift   # App entry point, AppDelegate, status bar right-click menu, dock icon management
 ├── UVC/
 │   ├── UVCConstants.swift         # UVC spec constants (request codes, descriptor types)
 │   ├── UVCControl.swift           # Enum of all UVC controls with selectors and data lengths
@@ -110,8 +114,8 @@ MacWebcamController/
 | Exposure (absolute)    | Camera Terminal  | no     |
 | Focus (absolute)       | Camera Terminal  | no     |
 
-Not all cameras support all controls — unsupported controls are automatically hidden.
-Auto exposure and auto white balance are shown only when the camera reports support.
+Not all cameras support all controls — unsupported controls are automatically hidden in both the menu bar popover and the full window.
+Auto exposure, auto white balance and auto focus toggles are shown only when the camera reports support for them.
 
 ---
 
