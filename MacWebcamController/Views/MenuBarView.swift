@@ -27,7 +27,7 @@ struct MenuBarView: View {
                 Divider()
 
                 ForEach(quickControls) { control in
-                    if control == .exposureAbsolute && viewModel.autoExposureSupported {
+                    if control == .exposureAbsolute && viewModel.autoExposureSupported && viewModel.controls[control]?.isSupported == true {
                         Toggle("Auto Exposure", isOn: Binding(
                             get: { viewModel.autoExposureEnabled },
                             set: { viewModel.setAutoExposure($0) }
@@ -35,7 +35,7 @@ struct MenuBarView: View {
                         .toggleStyle(.switch)
                         .controlSize(.small)
                     }
-                    if let state = viewModel.controls[control] {
+                    if let state = viewModel.controls[control], state.isSupported {
                         ControlSliderView(control: control, state: state) { value in
                             viewModel.setValue(value, for: control)
                         }
