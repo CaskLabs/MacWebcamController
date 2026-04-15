@@ -11,18 +11,16 @@ struct MenuBarView: View {
     ]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack {
                 CameraPickerView()
+                Spacer()
                 if viewModel.selectedCamera != nil {
-                    Button {
+                    CompactButton(help: "Reset all controls to defaults") {
                         viewModel.resetToDefaults()
                     } label: {
                         Image(systemName: "arrow.counterclockwise")
                     }
-                    .buttonStyle(.borderless)
-                    .foregroundStyle(.secondary)
-                    .help("Reset all controls to defaults")
                 }
             }
 
@@ -31,7 +29,7 @@ struct MenuBarView: View {
                     ProgressView()
                         .scaleEffect(0.6)
                     Text("Loading controls…")
-                        .font(.caption)
+                        .font(.body)
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .center)
@@ -45,7 +43,7 @@ struct MenuBarView: View {
                             set: { viewModel.setAutoExposure($0) }
                         ))
                         .toggleStyle(.switch)
-                        .controlSize(.small)
+                        .controlSize(.regular)
                     }
                     if let state = viewModel.controls[control], state.isSupported {
                         ControlSliderView(control: control, state: state) { value in
@@ -57,7 +55,7 @@ struct MenuBarView: View {
                 }
             } else {
                 Text("Select a camera above to adjust settings.")
-                    .font(.caption)
+                    .font(.body)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.vertical, 8)
@@ -65,7 +63,7 @@ struct MenuBarView: View {
 
             if let error = viewModel.errorMessage {
                 Text(error)
-                    .font(.caption)
+                    .font(.body)
                     .foregroundStyle(.red)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity)
@@ -73,33 +71,56 @@ struct MenuBarView: View {
 
             Divider()
 
-            HStack {
-                Button("Open Full Controls") {
+            HStack(spacing: 6) {
+                CompactButton(help: "Open full controls window") {
                     openWindow(id: "main")
                     NSApp.activate(ignoringOtherApps: true)
+                } label: {
+                    Text("Open Full Controls")
                 }
-                .buttonStyle(.borderless)
 
                 Spacer()
 
-                Button {
+                CompactButton(help: "Settings") {
                     openWindow(id: "main")
                     NSApp.activate(ignoringOtherApps: true)
                 } label: {
                     Image(systemName: "gear")
                 }
-                .buttonStyle(.borderless)
-                .foregroundStyle(.secondary)
-                .help("Settings")
 
-                Button("Quit") {
+                CompactButton(help: "Quit") {
                     NSApplication.shared.terminate(nil)
+                } label: {
+                    Text("Quit")
                 }
-                .buttonStyle(.borderless)
-                .foregroundStyle(.secondary)
             }
         }
-        .padding(12)
-        .frame(width: 300)
+        .padding(14)
+        .frame(width: 340)
+    }
+}
+
+/// A small borderless button with a rounded-rectangle background box.
+private struct CompactButton<Label: View>: View {
+    let help: String
+    let action: () -> Void
+    @ViewBuilder let label: () -> Label
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            label()
+                .font(.body)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 6)
+                .background(
+                    RoundedRectangle(cornerRadius: 5)
+                        .fill(isHovered ? Color.primary.opacity(0.12) : Color.primary.opacity(0.06))
+                )
+        }
+        .buttonStyle(.plain)
+        .help(help)
+        .onHover { isHovered = $0 }
     }
 }
