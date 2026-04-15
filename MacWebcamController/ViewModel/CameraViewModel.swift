@@ -184,13 +184,54 @@ final class CameraViewModel {
                 if let cameraID {
                     SettingsPersistence().save(value: value, for: control, cameraID: cameraID)
                 }
+                Task { @MainActor in self?.controls[control]?.error = nil }
             } catch {
                 print("[UVC] SET_CUR \(control.displayName) = \(value) FAILED: \(error)")
-                // Revert optimistic update by re-reading
+
+                // When a control rejects SET_CUR, re-check whether its auto mode is actually
+                // on — some camera firmware reports auto disabled via GET_CUR but still locks
+                // the control. Detecting this lets us self-correct the toggle state and show
+                // a clear message instead of a raw USB error.
+                var autoLocked = false
+                switch control {
+                case .whiteBalanceTemperature:
+                    if let isAuto = try? device.getWhiteBalanceAuto(), isAuto {
+                        autoLocked = true
+                        Task { @MainActor in self?.whiteBalanceAutoEnabled = true }
+                    }
+                case .exposureAbsolute:
+                    if let mode = try? device.getAutoExposureMode(), mode != 1 {
+                        autoLocked = true
+                        Task { @MainActor in self?.autoExposureEnabled = true }
+                    }
+                case .focusAbsolute:
+                    if let isAuto = try? device.getFocusAuto(), isAuto {
+                        autoLocked = true
+                        Task { @MainActor in self?.focusAutoEnabled = true }
+                    }
+                default:
+                    break
+                }
+
+                // Revert optimistic update and show an appropriate error message
+                let errorMessage = autoLocked
+                    ? "Disable auto mode first to adjust manually."
+                    : "Set failed: \(error.localizedDescription)"
                 if let actualValue = try? device.getValue(for: control) {
-                    Task { @MainActor in
-                        self?.controls[control]?.currentValue = actualValue
-                        self?.controls[control]?.error = "Set failed: \(error.localizedDescription)"
+                    if actualValue == value && !autoLocked {
+                        // Camera applied the value despite the USB error (firmware quirk) — treat as success.
+                        if let cameraID {
+                            SettingsPersistence().save(value: value, for: control, cameraID: cameraID)
+                        }
+                        Task { @MainActor in
+                            self?.controls[control]?.currentValue = actualValue
+                            self?.controls[control]?.error = nil
+                        }
+                    } else {
+                        Task { @MainActor in
+                            self?.controls[control]?.currentValue = actualValue
+                            self?.controls[control]?.error = errorMessage
+                        }
                     }
                 }
             }

@@ -126,7 +126,7 @@ enum UVCDeviceDiscovery {
         )
 
         if let data = configData {
-            let info = UVCDescriptorParser.parse(configurationDescriptor: data)
+            let info = UVCDescriptorParser.parse(configurationDescriptor: data, targetVCInterface: vcInterfaceNumber)
             device.configure(
                 processingUnitID: info.processingUnitID,
                 cameraTerminalID: info.cameraTerminalID,
@@ -143,13 +143,18 @@ enum UVCDeviceDiscovery {
 
     // MARK: - Device Service Lookup
 
-    /// Walks up the IOKit service tree from an interface service to find the IOUSBHostDevice.
+    /// Walks up the IOKit service tree from an interface service to find the USB device node.
+    ///
+    /// Rather than matching specific class names (which vary across macOS versions and USB
+    /// controller types such as Thunderbolt-attached hubs), this checks for the presence of
+    /// USB device properties (VendorID + ProductID). The first ancestor that has both is the
+    /// camera's USB device node regardless of what the IOKit class is called.
     private static func findDeviceService(from service: io_service_t) -> io_service_t? {
         var current: io_object_t = service
         IOObjectRetain(current)
 
-        // Walk up to 4 levels looking for an IOUSBHostDevice
-        for level in 0..<4 {
+        // Walk up to 8 levels. Devices behind a monitor hub sit 1–2 levels above the interface.
+        for level in 0..<8 {
             var parent: io_object_t = 0
             guard IORegistryEntryGetParentEntry(current, kIOServicePlane, &parent) == KERN_SUCCESS else {
                 IOObjectRelease(current)
@@ -161,7 +166,11 @@ enum UVCDeviceDiscovery {
             let cls = ioClassName(current)
             print("[UVC Discovery]   parent[\(level)] class = \(cls)")
 
-            if cls == "IOUSBHostDevice" || cls == "AppleUSBDevice" {
+            // Accept any node that exposes VendorID + ProductID — that identifies the USB device
+            // node independent of the exact IOKit class name used by this macOS version.
+            if registryInt(current, key: kUSBVendorID) != nil &&
+               registryInt(current, key: kUSBProductID) != nil {
+                print("[UVC Discovery]   Found USB device node at level \(level) (class=\(cls))")
                 return current  // caller takes ownership
             }
         }
@@ -173,23 +182,31 @@ enum UVCDeviceDiscovery {
     // MARK: - Config Descriptor Fallback
 
     /// Try to read configuration descriptor from IOKit registry properties.
+    /// Walks up several levels because the property may live on the device node,
+    /// which could be one or two hops above the interface node.
     private static func configDescriptorFromRegistry(_ interfaceService: io_service_t) -> Data? {
-        // Some devices expose "USB Configuration Descriptor" as a registry property
-        // Walk up to device and check
-        var parent: io_object_t = 0
-        guard IORegistryEntryGetParentEntry(interfaceService, kIOServicePlane, &parent) == KERN_SUCCESS else {
-            return nil
-        }
-        defer { IOObjectRelease(parent) }
+        let keys = ["USB Configuration Descriptor", "ConfigurationDescriptor", "Device Descriptor"]
 
-        for key in ["USB Configuration Descriptor", "ConfigurationDescriptor", "Device Descriptor"] {
-            if let prop = IORegistryEntryCreateCFProperty(parent, key as CFString, kCFAllocatorDefault, 0) {
-                let val = prop.takeRetainedValue()
-                if let data = val as? Data {
-                    print("[UVC Discovery]   Found config descriptor in registry key '\(key)' (\(data.count) bytes)")
-                    return data
+        var current: io_object_t = interfaceService
+        IOObjectRetain(current)
+
+        defer { IOObjectRelease(current) }
+
+        for _ in 0..<4 {
+            for key in keys {
+                if let prop = IORegistryEntryCreateCFProperty(current, key as CFString, kCFAllocatorDefault, 0) {
+                    let val = prop.takeRetainedValue()
+                    if let data = val as? Data, data.count > 4 {
+                        print("[UVC Discovery]   Found config descriptor in registry key '\(key)' (\(data.count) bytes)")
+                        return data
+                    }
                 }
             }
+
+            var parent: io_object_t = 0
+            guard IORegistryEntryGetParentEntry(current, kIOServicePlane, &parent) == KERN_SUCCESS else { break }
+            IOObjectRelease(current)
+            current = parent
         }
 
         return nil

@@ -20,16 +20,15 @@ enum UVCDescriptorParser {
     /// Parses the configuration descriptor data to extract UVC unit IDs
     /// and supported control bitmasks.
     ///
-    /// The configuration descriptor contains class-specific VC interface
-    /// descriptors that describe the video function's topology:
-    /// - VC_INPUT_TERMINAL (subtype 0x02) with type ITT_CAMERA (0x0201)
-    ///   gives the camera terminal ID and its bmControls
-    /// - VC_PROCESSING_UNIT (subtype 0x05) gives the processing unit ID
-    ///   and its bmControls
-    static func parse(configurationDescriptor data: Data) -> UVCDescriptorInfo {
+    /// - Parameter targetVCInterface: The VC interface number to parse. When a device
+    ///   exposes multiple video functions (e.g. IR + RGB), each function has its own
+    ///   VC interface with distinct PU/CT unit IDs. Passing the correct interface number
+    ///   ensures we extract unit IDs only from that function's section of the descriptor,
+    ///   avoiding cross-contamination between functions.
+    static func parse(configurationDescriptor data: Data, targetVCInterface: UInt8? = nil) -> UVCDescriptorInfo {
         var info = UVCDescriptorInfo()
         var offset = 0
-        var inVCInterface = false  // Only parse CS descriptors inside the VC interface
+        var inVCInterface = false  // Only parse CS descriptors inside the target VC interface
 
         while offset + 2 <= data.count {
             let bLength = Int(data[offset])
@@ -43,9 +42,17 @@ enum UVCDescriptorParser {
             if bDescriptorType == 0x04 && bLength >= 9 {
                 let bInterfaceClass    = data[offset + 5]
                 let bInterfaceSubClass = data[offset + 6]
+                let bInterfaceNumber   = data[offset + 2]
                 if bInterfaceClass == CC_VIDEO && bInterfaceSubClass == SC_VIDEOCONTROL {
-                    info.vcInterfaceNumber = data[offset + 2]
-                    inVCInterface = true
+                    // Enter VC interface section only if it matches the target.
+                    // When no target is specified fall back to the first VC interface found.
+                    let isTarget = targetVCInterface.map { $0 == bInterfaceNumber } ?? (info.vcInterfaceNumber == 0 && info.processingUnitID == 0)
+                    if isTarget {
+                        info.vcInterfaceNumber = bInterfaceNumber
+                        inVCInterface = true
+                    } else {
+                        inVCInterface = false
+                    }
                 } else {
                     // Any non-VC interface — stop parsing for UVC units.
                     // VS descriptors share the 0x24 type but have different subtypes;
@@ -54,7 +61,7 @@ enum UVCDescriptorParser {
                 }
             }
 
-            // Only parse class-specific descriptors while inside the VC interface
+            // Only parse class-specific descriptors while inside the target VC interface
             if inVCInterface && bDescriptorType == CS_INTERFACE && bLength >= 3 {
                 let bDescriptorSubtype = data[offset + 2]
                 parseClassSpecificDescriptor(
@@ -72,7 +79,7 @@ enum UVCDescriptorParser {
         if info.processingUnitID == 0 {
             // PU not found — dump first 120 bytes for diagnosis
             let hexDump = data.prefix(120).map { String(format: "%02X", $0) }.joined(separator: " ")
-            print("[UVC Descriptor] PU not found. Descriptor hex: \(hexDump)")
+            print("[UVC Descriptor] PU not found (target interface=\(targetVCInterface.map { String($0) } ?? "any")). Descriptor hex: \(hexDump)")
         }
 
         return info
