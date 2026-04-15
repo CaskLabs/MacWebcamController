@@ -12,7 +12,19 @@ struct MenuBarView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            CameraPickerView()
+            HStack {
+                CameraPickerView()
+                if viewModel.selectedCamera != nil {
+                    Button {
+                        viewModel.resetToDefaults()
+                    } label: {
+                        Image(systemName: "arrow.counterclockwise")
+                    }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(.secondary)
+                    .help("Reset all controls to defaults")
+                }
+            }
 
             if viewModel.isLoading {
                 HStack {
