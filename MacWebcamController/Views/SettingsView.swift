@@ -8,7 +8,7 @@ enum AppearanceMode: String, CaseIterable {
     case light  = "Light"
     case dark   = "Dark"
 
-    func apply() {
+    @MainActor func apply() {
         switch self {
         case .system: NSApp.appearance = nil
         case .light:  NSApp.appearance = NSAppearance(named: .aqua)

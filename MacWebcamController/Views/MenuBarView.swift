@@ -81,7 +81,7 @@ struct MenuBarView: View {
 
                 Spacer()
 
-                CompactButton(help: "Settings") {
+                CompactButton(help: "Settings", horizontalPadding: 16) {
                     openWindow(id: "main")
                     NSApp.activate(ignoringOtherApps: true)
                 } label: {
@@ -103,6 +103,7 @@ struct MenuBarView: View {
 /// A small borderless button with a rounded-rectangle background box.
 private struct CompactButton<Label: View>: View {
     let help: String
+    var horizontalPadding: CGFloat = 9
     let action: () -> Void
     @ViewBuilder let label: () -> Label
 
@@ -112,7 +113,7 @@ private struct CompactButton<Label: View>: View {
         Button(action: action) {
             label()
                 .font(.body)
-                .padding(.horizontal, 9)
+                .padding(.horizontal, horizontalPadding)
                 .padding(.vertical, 6)
                 .background(
                     RoundedRectangle(cornerRadius: 5)
