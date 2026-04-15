@@ -27,10 +27,20 @@ struct MenuBarView: View {
                 Divider()
 
                 ForEach(quickControls) { control in
+                    if control == .exposureAbsolute && viewModel.autoExposureSupported {
+                        Toggle("Auto Exposure", isOn: Binding(
+                            get: { viewModel.autoExposureEnabled },
+                            set: { viewModel.setAutoExposure($0) }
+                        ))
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
+                    }
                     if let state = viewModel.controls[control] {
                         ControlSliderView(control: control, state: state) { value in
                             viewModel.setValue(value, for: control)
                         }
+                        .disabled(control == .exposureAbsolute && viewModel.autoExposureEnabled)
+                        .opacity(control == .exposureAbsolute && viewModel.autoExposureEnabled ? 0.4 : 1.0)
                     }
                 }
             } else {
