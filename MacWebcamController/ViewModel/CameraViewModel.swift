@@ -8,6 +8,10 @@ import Observation
 final class CameraViewModel {
     var selectedCamera: CameraInfo?
     var selectedCameraID: String?
+    /// Tracks the last explicitly selected camera so it can be auto-reselected on reconnect.
+    /// ID may change when plugged into a different port, so we keep the name as a fallback.
+    private(set) var lastSelectedCameraID: String?
+    private(set) var lastSelectedCameraName: String?
     var controls: [UVCControl: ControlState] = [:]
     var errorMessage: String?
     var isLoading: Bool = false
@@ -32,6 +36,10 @@ final class CameraViewModel {
     // MARK: - Camera Selection
 
     func selectCamera(_ camera: CameraInfo?) {
+        if let camera {
+            lastSelectedCameraID = camera.id
+            lastSelectedCameraName = camera.name
+        }
         selectedCamera = camera
         selectedCameraID = camera?.id
         errorMessage = nil
@@ -155,7 +163,9 @@ final class CameraViewModel {
         }
 
         let finalControls = updated
-        Task { @MainActor in
+        let anySupported = finalControls.values.contains { $0.isSupported }
+        Task { @MainActor [weak self] in
+            guard let self else { return }
             self.controls = finalControls
             self.autoExposureSupported = aeSupported
             self.autoExposureEnabled = aeEnabled
@@ -164,6 +174,19 @@ final class CameraViewModel {
             self.focusAutoSupported = focusAutoSupported
             self.focusAutoEnabled = focusAutoEnabled
             self.isLoading = false
+
+            // If every control failed it's almost certainly a timing issue (USB device not
+            // fully enumerated yet). Retry once after 1.5 s — covers different-port plug-ins
+            // where full re-enumeration takes longer than the initial connect delay.
+            if !anySupported, let device = self.selectedCamera?.uvcDevice {
+                print("[ViewModel] All controls unsupported — retrying after delay (timing issue?)")
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                guard self.selectedCamera?.id == cameraID else { return }
+                self.isLoading = true
+                self.ioQueue.async { [weak self] in
+                    self?.loadControls(from: device, cameraID: cameraID)
+                }
+            }
         }
     }
 

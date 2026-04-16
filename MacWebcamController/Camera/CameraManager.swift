@@ -29,7 +29,12 @@ final class CameraManager {
         observerBox.connected = NotificationCenter.default.addObserver(
             forName: AVCaptureDevice.wasConnectedNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.refreshCameras() }
+            Task { @MainActor in
+                // Delay so IOKit finishes enumerating the USB device before we probe it.
+                // Without this, GET_MIN requests fail and controls are incorrectly greyed out.
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                self?.refreshCameras()
+            }
         }
 
         observerBox.disconnected = NotificationCenter.default.addObserver(

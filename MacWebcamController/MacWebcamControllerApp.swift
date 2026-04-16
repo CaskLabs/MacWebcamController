@@ -148,10 +148,20 @@ struct MacWebcamControllerApp: App {
 
     @MainActor
     private func handleCameraListChange(_ cameras: [CameraInfo]) {
-        guard let selected = viewModel.selectedCamera else { return }
-        if !cameras.contains(where: { $0.id == selected.id }) {
-            viewModel.selectCamera(nil)
-            viewModel.errorMessage = "Camera \"\(selected.name)\" was disconnected."
+        if let selected = viewModel.selectedCamera {
+            // Camera was removed from the list — deselect and notify.
+            if !cameras.contains(where: { $0.id == selected.id }) {
+                viewModel.selectCamera(nil)
+                viewModel.errorMessage = "Camera \"\(selected.name)\" was disconnected."
+            }
+        } else {
+            // Camera was not selected — check if a previously selected camera reappeared.
+            // Try ID first (same port), then name (different port — uniqueID changes with location).
+            let reconnected = cameras.first(where: { $0.id == viewModel.lastSelectedCameraID })
+                ?? cameras.first(where: { $0.name == viewModel.lastSelectedCameraName })
+            if let reconnected {
+                viewModel.selectCamera(reconnected)
+            }
         }
     }
 }
