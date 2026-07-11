@@ -157,10 +157,16 @@ struct MacWebcamControllerApp: App {
         } else {
             // Camera was not selected — check if a previously selected camera reappeared.
             // Try ID first (same port), then name (different port — uniqueID changes with location).
-            let reconnected = cameras.first(where: { $0.id == viewModel.lastSelectedCameraID })
-                ?? cameras.first(where: { $0.name == viewModel.lastSelectedCameraName })
-            if let reconnected {
-                viewModel.selectCamera(reconnected)
+            if let sameCamera = cameras.first(where: { $0.id == viewModel.lastSelectedCameraID }) {
+                viewModel.selectCamera(sameCamera)
+            } else if let sameNameCamera = cameras.first(where: { $0.name == viewModel.lastSelectedCameraName }) {
+                if let oldCameraID = viewModel.lastSelectedCameraID {
+                    SettingsPersistence().migrateCameraData(
+                        from: oldCameraID,
+                        to: sameNameCamera.id
+                    )
+                }
+                viewModel.selectCamera(sameNameCamera)
             }
         }
     }

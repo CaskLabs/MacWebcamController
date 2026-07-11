@@ -29,7 +29,21 @@
 		A100000020 /* UVCControlProber.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000023 /* UVCControlProber.swift */; };
 		A100000021 /* CameraPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000024 /* CameraPreviewView.swift */; };
 		A100000022 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000025 /* SettingsView.swift */; };
+		A200000001 /* UVCDescriptorParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000001 /* UVCDescriptorParserTests.swift */; };
+		A200000002 /* UVCValueCodecTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000002 /* UVCValueCodecTests.swift */; };
+		A200000003 /* SettingsPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000003 /* SettingsPersistenceTests.swift */; };
+		A200000004 /* CameraMatchingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200000004 /* CameraMatchingTests.swift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		E200000003 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E100000002 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E100000001;
+			remoteInfo = MacWebcamController;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		B100000001 /* MacWebcamControllerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacWebcamControllerApp.swift; sourceTree = "<group>"; };
@@ -57,6 +71,11 @@
 		B100000023 /* UVCControlProber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UVCControlProber.swift; sourceTree = "<group>"; };
 		B100000024 /* CameraPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraPreviewView.swift; sourceTree = "<group>"; };
 		B100000025 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		B200000001 /* UVCDescriptorParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UVCDescriptorParserTests.swift; sourceTree = "<group>"; };
+		B200000002 /* UVCValueCodecTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UVCValueCodecTests.swift; sourceTree = "<group>"; };
+		B200000003 /* SettingsPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsPersistenceTests.swift; sourceTree = "<group>"; };
+		B200000004 /* CameraMatchingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraMatchingTests.swift; sourceTree = "<group>"; };
+		B200000005 /* MacWebcamControllerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MacWebcamControllerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -70,6 +89,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C200000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -77,6 +103,7 @@
 			isa = PBXGroup;
 			children = (
 				D100000002 /* MacWebcamController */,
+				D200000001 /* MacWebcamControllerTests */,
 				D100000008 /* Frameworks */,
 				D100000009 /* Products */,
 			);
@@ -164,8 +191,20 @@
 			isa = PBXGroup;
 			children = (
 				B100000020 /* MacWebcamController.app */,
+				B200000005 /* MacWebcamControllerTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		D200000001 /* MacWebcamControllerTests */ = {
+			isa = PBXGroup;
+			children = (
+				B200000001 /* UVCDescriptorParserTests.swift */,
+				B200000002 /* UVCValueCodecTests.swift */,
+				B200000003 /* SettingsPersistenceTests.swift */,
+				B200000004 /* CameraMatchingTests.swift */,
+			);
+			path = MacWebcamControllerTests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -188,6 +227,24 @@
 			productReference = B100000020 /* MacWebcamController.app */;
 			productType = "com.apple.product-type.application";
 		};
+		E200000001 /* MacWebcamControllerTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F200000001 /* Build configuration list for PBXNativeTarget "MacWebcamControllerTests" */;
+			buildPhases = (
+				C200000002 /* Sources */,
+				C200000001 /* Frameworks */,
+				C200000003 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				E200000002 /* PBXTargetDependency */,
+			);
+			name = MacWebcamControllerTests;
+			productName = MacWebcamControllerTests;
+			productReference = B200000005 /* MacWebcamControllerTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -200,6 +257,10 @@
 				TargetAttributes = {
 					E100000001 = {
 						CreatedOnToolsVersion = 16.0;
+					};
+					E200000001 = {
+						CreatedOnToolsVersion = 26.0;
+						TestTargetID = E100000001;
 					};
 				};
 			};
@@ -217,6 +278,7 @@
 			projectRoot = "";
 			targets = (
 				E100000001 /* MacWebcamController */,
+				E200000001 /* MacWebcamControllerTests */,
 			);
 		};
 /* End PBXProject section */
@@ -227,6 +289,13 @@
 			buildActionMask = 2147483647;
 			files = (
 				A100000011 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C200000003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -258,7 +327,26 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C200000002 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A200000001 /* UVCDescriptorParserTests.swift in Sources */,
+				A200000002 /* UVCValueCodecTests.swift in Sources */,
+				A200000003 /* SettingsPersistenceTests.swift in Sources */,
+				A200000004 /* CameraMatchingTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		E200000002 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E100000001 /* MacWebcamController */;
+			targetProxy = E200000003 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		F100000010 /* Debug */ = {
@@ -285,7 +373,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -314,7 +402,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MTL_FAST_MATH = YES;
 				SDKROOT = macosx;
 				SWIFT_COMPILATION_MODE = wholemodule;
@@ -374,6 +462,36 @@
 			};
 			name = Release;
 		};
+		F200000010 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.macwebcamcontroller.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MacWebcamController.app/Contents/MacOS/MacWebcamController";
+			};
+			name = Debug;
+		};
+		F200000011 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.macwebcamcontroller.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MacWebcamController.app/Contents/MacOS/MacWebcamController";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -391,6 +509,15 @@
 			buildConfigurations = (
 				F100000012 /* Debug */,
 				F100000013 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		F200000001 /* Build configuration list for PBXNativeTarget "MacWebcamControllerTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F200000010 /* Debug */,
+				F200000011 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

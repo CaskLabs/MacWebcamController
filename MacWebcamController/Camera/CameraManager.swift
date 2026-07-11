@@ -137,12 +137,12 @@ final class CameraManager {
     /// Returns true when the two names refer to the same physical camera.
     /// Handles cases where IOKit and AVFoundation names differ slightly
     /// (e.g. "Dell Webcam WB7022" vs "Dell Webcam WB7022 - RGB").
-    nonisolated private static func nameSimilar(_ a: String, _ b: String) -> Bool {
+    nonisolated static func nameSimilar(_ a: String, _ b: String) -> Bool {
         let la = a.lowercased(), lb = b.lowercased()
         return la == lb || la.contains(lb) || lb.contains(la)
     }
 
-    nonisolated private static func extractLocationID(from uniqueID: String) -> UInt32? {
+    nonisolated static func extractLocationID(from uniqueID: String) -> UInt32? {
         let hex = uniqueID
             .replacingOccurrences(of: "0x", with: "", options: .caseInsensitive)
         let prefix = String(hex.prefix(8))
@@ -152,7 +152,7 @@ final class CameraManager {
         return nil
     }
 
-    nonisolated private static func extractVendorProduct(from modelID: String) -> (UInt16, UInt16) {
+    nonisolated static func extractVendorProduct(from modelID: String) -> (UInt16, UInt16) {
         // Format: "UVC Camera VendorID_21325 ProductID_8457" (decimal)
         if let vidRange = modelID.range(of: "VendorID_"),
            let pidRange = modelID.range(of: "ProductID_") {

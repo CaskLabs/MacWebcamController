@@ -1,14 +1,30 @@
 import SwiftUI
 
-struct ControlSliderView: View {
+struct ControlSliderView<Accessory: View>: View {
     let control: UVCControl
     let state: ControlState
     var onValueChanged: (Int) -> Void
+    var isSliderDisabled: Bool
+    var accessory: Accessory
 
     // Local state tracks the slider position immediately — no waiting for ViewModel round-trip.
     @State private var localValue: Double = 0
     @State private var isDragging = false
     @State private var debounceTask: Task<Void, Never>?
+
+    init(
+        control: UVCControl,
+        state: ControlState,
+        onValueChanged: @escaping (Int) -> Void,
+        isSliderDisabled: Bool = false,
+        @ViewBuilder accessory: () -> Accessory
+    ) {
+        self.control = control
+        self.state = state
+        self.onValueChanged = onValueChanged
+        self.isSliderDisabled = isSliderDisabled
+        self.accessory = accessory()
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -22,33 +38,41 @@ struct ControlSliderView: View {
                     .frame(minWidth: 40, alignment: .trailing)
             }
 
-            if state.isSupported && state.maximum > state.minimum {
-                Slider(
-                    value: $localValue,
-                    in: Double(state.minimum)...Double(state.maximum),
-                    step: 1.0,
-                    onEditingChanged: { editing in
-                        isDragging = editing
-                        if !editing {
-                            // Dragging ended — flush immediately without waiting for debounce
-                            debounceTask?.cancel()
+            HStack(spacing: 8) {
+                Group {
+                    if state.isSupported && state.maximum > state.minimum {
+                        Slider(
+                            value: $localValue,
+                            in: Double(state.minimum)...Double(state.maximum),
+                            step: 1.0,
+                            onEditingChanged: { editing in
+                                isDragging = editing
+                                if !editing {
+                                    // Dragging ended — flush immediately without waiting for debounce
+                                    debounceTask?.cancel()
+                                    let res = max(1, state.resolution)
+                                    let snapped = (Int(localValue.rounded()) / res) * res
+                                    let clamped = max(state.minimum, min(state.maximum, snapped))
+                                    onValueChanged(clamped)
+                                }
+                            }
+                        )
+                        .onChange(of: localValue) { _, newVal in
+                            guard isDragging else { return }
                             let res = max(1, state.resolution)
-                            let snapped = (Int(localValue.rounded()) / res) * res
+                            let snapped = (Int(newVal.rounded()) / res) * res
                             let clamped = max(state.minimum, min(state.maximum, snapped))
-                            onValueChanged(clamped)
+                            scheduleUpdate(clamped)
                         }
+                    } else {
+                        Slider(value: .constant(0))
+                            .disabled(true)
                     }
-                )
-                .onChange(of: localValue) { _, newVal in
-                    guard isDragging else { return }
-                    let res = max(1, state.resolution)
-                    let snapped = (Int(newVal.rounded()) / res) * res
-                    let clamped = max(state.minimum, min(state.maximum, snapped))
-                    scheduleUpdate(clamped)
                 }
-            } else {
-                Slider(value: .constant(0))
-                    .disabled(true)
+                .disabled(isSliderDisabled)
+                .opacity(isSliderDisabled ? 0.4 : 1.0)
+
+                accessory
             }
 
             if let error = state.error {
@@ -75,6 +99,14 @@ struct ControlSliderView: View {
             try? await Task.sleep(for: .milliseconds(50))
             guard !Task.isCancelled else { return }
             onValueChanged(value)
+        }
+    }
+}
+
+extension ControlSliderView where Accessory == EmptyView {
+    init(control: UVCControl, state: ControlState, onValueChanged: @escaping (Int) -> Void) {
+        self.init(control: control, state: state, onValueChanged: onValueChanged, isSliderDisabled: false) {
+            EmptyView()
         }
     }
 }

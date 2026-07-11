@@ -37,20 +37,15 @@ struct MenuBarView: View {
                 Divider()
 
                 ForEach(quickControls) { control in
-                    if control == .exposureAbsolute && viewModel.autoExposureSupported && viewModel.controls[control]?.isSupported == true {
-                        Toggle("Auto Exposure", isOn: Binding(
-                            get: { viewModel.autoExposureEnabled },
-                            set: { viewModel.setAutoExposure($0) }
-                        ))
-                        .toggleStyle(.switch)
-                        .controlSize(.regular)
-                    }
                     if let state = viewModel.controls[control], state.isSupported {
-                        ControlSliderView(control: control, state: state) { value in
-                            viewModel.setValue(value, for: control)
+                        ControlSliderView(
+                            control: control,
+                            state: state,
+                            onValueChanged: { value in viewModel.setValue(value, for: control) },
+                            isSliderDisabled: isAutoEnabled(for: control)
+                        ) {
+                            autoToggle(for: control)
                         }
-                        .disabled(control == .exposureAbsolute && viewModel.autoExposureEnabled)
-                        .opacity(control == .exposureAbsolute && viewModel.autoExposureEnabled ? 0.4 : 1.0)
                     }
                 }
             } else {
@@ -97,6 +92,44 @@ struct MenuBarView: View {
         }
         .padding(14)
         .frame(width: 340)
+    }
+
+    private func isAutoEnabled(for control: UVCControl) -> Bool {
+        switch control {
+        case .exposureAbsolute:       return viewModel.autoExposureEnabled
+        case .whiteBalanceTemperature: return viewModel.whiteBalanceAutoEnabled
+        case .focusAbsolute:          return viewModel.focusAutoEnabled
+        default:                      return false
+        }
+    }
+
+    @ViewBuilder
+    private func autoToggle(for control: UVCControl) -> some View {
+        switch control {
+        case .exposureAbsolute where viewModel.autoExposureSupported:
+            Toggle("Auto", isOn: Binding(
+                get: { viewModel.autoExposureEnabled },
+                set: { viewModel.setAutoExposure($0) }
+            ))
+            .toggleStyle(.switch)
+            .controlSize(.small)
+        case .whiteBalanceTemperature where viewModel.whiteBalanceAutoSupported:
+            Toggle("Auto", isOn: Binding(
+                get: { viewModel.whiteBalanceAutoEnabled },
+                set: { viewModel.setWhiteBalanceAuto($0) }
+            ))
+            .toggleStyle(.switch)
+            .controlSize(.small)
+        case .focusAbsolute where viewModel.focusAutoSupported:
+            Toggle("Auto", isOn: Binding(
+                get: { viewModel.focusAutoEnabled },
+                set: { viewModel.setFocusAuto($0) }
+            ))
+            .toggleStyle(.switch)
+            .controlSize(.small)
+        default:
+            EmptyView()
+        }
     }
 }
 

@@ -25,7 +25,11 @@ struct CameraPreset: Codable, Identifiable {
 /// Saves and restores per-camera UVC control values using UserDefaults.
 /// Key format: "camera.<uniqueID>.<control.rawValue>"
 struct SettingsPersistence {
-    private let defaults = UserDefaults.standard
+    private let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
 
     private func key(for control: UVCControl, cameraID: String) -> String {
         "camera.\(cameraID).\(control.rawValue)"
@@ -60,6 +64,25 @@ struct SettingsPersistence {
     func clearAll(cameraID: String) {
         for control in UVCControl.allCases {
             defaults.removeObject(forKey: key(for: control, cameraID: cameraID))
+        }
+    }
+
+    /// Copies persisted values and presets when the same camera reconnects with a
+    /// different AVFoundation ID, for example after moving it to another USB port.
+    /// The source data is retained so reconnecting on the original port also works.
+    func migrateCameraData(from oldCameraID: String, to newCameraID: String) {
+        guard !oldCameraID.isEmpty,
+              !newCameraID.isEmpty,
+              oldCameraID != newCameraID else { return }
+
+        for control in UVCControl.allCases {
+            guard let value = load(for: control, cameraID: oldCameraID) else { continue }
+            save(value: value, for: control, cameraID: newCameraID)
+        }
+
+        let oldPresets = loadPresets(cameraID: oldCameraID)
+        if !oldPresets.isEmpty {
+            savePresets(oldPresets, cameraID: newCameraID)
         }
     }
 

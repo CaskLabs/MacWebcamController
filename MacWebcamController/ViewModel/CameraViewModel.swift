@@ -76,7 +76,11 @@ final class CameraViewModel {
     }
 
     /// Reads all control values and ranges from the UVC device (runs on ioQueue).
-    nonisolated private func loadControls(from device: UVCDevice, cameraID: String) {
+    nonisolated private func loadControls(
+        from device: UVCDevice,
+        cameraID: String,
+        retryCount: Int = 0
+    ) {
         var updated: [UVCControl: ControlState] = [:]
 
         for control in UVCControl.allCases {
@@ -165,7 +169,7 @@ final class CameraViewModel {
         let finalControls = updated
         let anySupported = finalControls.values.contains { $0.isSupported }
         Task { @MainActor [weak self] in
-            guard let self else { return }
+            guard let self, self.selectedCamera?.id == cameraID else { return }
             self.controls = finalControls
             self.autoExposureSupported = aeSupported
             self.autoExposureEnabled = aeEnabled
@@ -178,13 +182,17 @@ final class CameraViewModel {
             // If every control failed it's almost certainly a timing issue (USB device not
             // fully enumerated yet). Retry once after 1.5 s — covers different-port plug-ins
             // where full re-enumeration takes longer than the initial connect delay.
-            if !anySupported, let device = self.selectedCamera?.uvcDevice {
+            if !anySupported, retryCount < 1 {
                 print("[ViewModel] All controls unsupported — retrying after delay (timing issue?)")
                 try? await Task.sleep(nanoseconds: 1_500_000_000)
                 guard self.selectedCamera?.id == cameraID else { return }
                 self.isLoading = true
                 self.ioQueue.async { [weak self] in
-                    self?.loadControls(from: device, cameraID: cameraID)
+                    self?.loadControls(
+                        from: device,
+                        cameraID: cameraID,
+                        retryCount: retryCount + 1
+                    )
                 }
             }
         }
@@ -193,21 +201,22 @@ final class CameraViewModel {
     // MARK: - Setting Values
 
     func setValue(_ value: Int, for control: UVCControl) {
-        guard let device = selectedCamera?.uvcDevice else { return }
+        guard let camera = selectedCamera, let device = camera.uvcDevice else { return }
 
         // Optimistic UI update
         controls[control]?.currentValue = value
 
         // Capture Sendable values before crossing actor boundary
-        let cameraID: String? = selectedCamera?.id
+        let cameraID = camera.id
         ioQueue.async { [weak self] in
             do {
                 try device.setValue(value, for: control)
                 print("[UVC] SET_CUR \(control.displayName) = \(value) OK")
-                if let cameraID {
-                    SettingsPersistence().save(value: value, for: control, cameraID: cameraID)
+                SettingsPersistence().save(value: value, for: control, cameraID: cameraID)
+                Task { @MainActor [weak self] in
+                    guard let self, self.selectedCamera?.id == cameraID else { return }
+                    self.controls[control]?.error = nil
                 }
-                Task { @MainActor in self?.controls[control]?.error = nil }
             } catch {
                 print("[UVC] SET_CUR \(control.displayName) = \(value) FAILED: \(error)")
 
@@ -220,17 +229,26 @@ final class CameraViewModel {
                 case .whiteBalanceTemperature:
                     if let isAuto = try? device.getWhiteBalanceAuto(), isAuto {
                         autoLocked = true
-                        Task { @MainActor in self?.whiteBalanceAutoEnabled = true }
+                        Task { @MainActor [weak self] in
+                            guard let self, self.selectedCamera?.id == cameraID else { return }
+                            self.whiteBalanceAutoEnabled = true
+                        }
                     }
                 case .exposureAbsolute:
                     if let mode = try? device.getAutoExposureMode(), mode != 1 {
                         autoLocked = true
-                        Task { @MainActor in self?.autoExposureEnabled = true }
+                        Task { @MainActor [weak self] in
+                            guard let self, self.selectedCamera?.id == cameraID else { return }
+                            self.autoExposureEnabled = true
+                        }
                     }
                 case .focusAbsolute:
                     if let isAuto = try? device.getFocusAuto(), isAuto {
                         autoLocked = true
-                        Task { @MainActor in self?.focusAutoEnabled = true }
+                        Task { @MainActor [weak self] in
+                            guard let self, self.selectedCamera?.id == cameraID else { return }
+                            self.focusAutoEnabled = true
+                        }
                     }
                 default:
                     break
@@ -243,17 +261,17 @@ final class CameraViewModel {
                 if let actualValue = try? device.getValue(for: control) {
                     if actualValue == value && !autoLocked {
                         // Camera applied the value despite the USB error (firmware quirk) — treat as success.
-                        if let cameraID {
-                            SettingsPersistence().save(value: value, for: control, cameraID: cameraID)
-                        }
-                        Task { @MainActor in
-                            self?.controls[control]?.currentValue = actualValue
-                            self?.controls[control]?.error = nil
+                        SettingsPersistence().save(value: value, for: control, cameraID: cameraID)
+                        Task { @MainActor [weak self] in
+                            guard let self, self.selectedCamera?.id == cameraID else { return }
+                            self.controls[control]?.currentValue = actualValue
+                            self.controls[control]?.error = nil
                         }
                     } else {
-                        Task { @MainActor in
-                            self?.controls[control]?.currentValue = actualValue
-                            self?.controls[control]?.error = errorMessage
+                        Task { @MainActor [weak self] in
+                            guard let self, self.selectedCamera?.id == cameraID else { return }
+                            self.controls[control]?.currentValue = actualValue
+                            self.controls[control]?.error = errorMessage
                         }
                     }
                 }
@@ -262,8 +280,11 @@ final class CameraViewModel {
     }
 
     func setAutoExposure(_ enabled: Bool) {
-        guard let device = selectedCamera?.uvcDevice, autoExposureSupported else { return }
+        guard let camera = selectedCamera,
+              let device = camera.uvcDevice,
+              autoExposureSupported else { return }
         autoExposureEnabled = enabled
+        let cameraID = camera.id
 
         ioQueue.async { [weak self] in
             do {
@@ -271,35 +292,50 @@ final class CameraViewModel {
                 try device.setAutoExposureMode(enabled ? 8 : 1)
             } catch {
                 print("[UVC] setAutoExposureMode failed: \(error)")
-                Task { @MainActor in self?.autoExposureEnabled = !enabled }
+                Task { @MainActor [weak self] in
+                    guard let self, self.selectedCamera?.id == cameraID else { return }
+                    self.autoExposureEnabled = !enabled
+                }
             }
         }
     }
 
     func setWhiteBalanceAuto(_ enabled: Bool) {
-        guard let device = selectedCamera?.uvcDevice, whiteBalanceAutoSupported else { return }
+        guard let camera = selectedCamera,
+              let device = camera.uvcDevice,
+              whiteBalanceAutoSupported else { return }
         whiteBalanceAutoEnabled = enabled
+        let cameraID = camera.id
 
         ioQueue.async { [weak self] in
             do {
                 try device.setWhiteBalanceAuto(enabled)
             } catch {
                 print("[UVC] setWhiteBalanceAuto failed: \(error)")
-                Task { @MainActor in self?.whiteBalanceAutoEnabled = !enabled }
+                Task { @MainActor [weak self] in
+                    guard let self, self.selectedCamera?.id == cameraID else { return }
+                    self.whiteBalanceAutoEnabled = !enabled
+                }
             }
         }
     }
 
     func setFocusAuto(_ enabled: Bool) {
-        guard let device = selectedCamera?.uvcDevice, focusAutoSupported else { return }
+        guard let camera = selectedCamera,
+              let device = camera.uvcDevice,
+              focusAutoSupported else { return }
         focusAutoEnabled = enabled
+        let cameraID = camera.id
 
         ioQueue.async { [weak self] in
             do {
                 try device.setFocusAuto(enabled)
             } catch {
                 print("[UVC] setFocusAuto failed: \(error)")
-                Task { @MainActor in self?.focusAutoEnabled = !enabled }
+                Task { @MainActor [weak self] in
+                    guard let self, self.selectedCamera?.id == cameraID else { return }
+                    self.focusAutoEnabled = !enabled
+                }
             }
         }
     }

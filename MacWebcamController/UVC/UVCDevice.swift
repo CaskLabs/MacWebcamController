@@ -3,6 +3,43 @@ import IOKit
 import IOKit.usb
 import IOUSBHost
 
+enum UVCValueCodec {
+    static func decode(_ data: Data, signed: Bool) -> Int {
+        switch data.count {
+        case 1: return signed ? Int(Int8(bitPattern: data[0])) : Int(data[0])
+        case 2:
+            let value = UInt16(data[0]) | (UInt16(data[1]) << 8)
+            return signed ? Int(Int16(bitPattern: value)) : Int(value)
+        case 4:
+            let value = UInt32(data[0]) | (UInt32(data[1]) << 8)
+                | (UInt32(data[2]) << 16) | (UInt32(data[3]) << 24)
+            return signed ? Int(Int32(bitPattern: value)) : Int(value)
+        default: return 0
+        }
+    }
+
+    static func encode(_ value: Int, length: Int) -> Data {
+        var data = Data(count: length)
+        switch length {
+        case 1:
+            data[0] = UInt8(truncatingIfNeeded: value)
+        case 2:
+            let encoded = UInt16(truncatingIfNeeded: value)
+            data[0] = UInt8(encoded & 0xFF)
+            data[1] = UInt8(encoded >> 8)
+        case 4:
+            let encoded = UInt32(truncatingIfNeeded: value)
+            data[0] = UInt8(encoded & 0xFF)
+            data[1] = UInt8((encoded >> 8) & 0xFF)
+            data[2] = UInt8((encoded >> 16) & 0xFF)
+            data[3] = UInt8((encoded >> 24) & 0xFF)
+        default:
+            break
+        }
+        return data
+    }
+}
+
 // MARK: - UVC Device Errors
 
 enum UVCDeviceError: Error, LocalizedError {
@@ -144,45 +181,15 @@ final class UVCDevice: @unchecked Sendable {
 
     // MARK: - Value Conversion
 
-    private func intValue(from data: Data, signed: Bool) -> Int {
-        switch data.count {
-        case 1: return signed ? Int(Int8(bitPattern: data[0])) : Int(data[0])
-        case 2:
-            let v = UInt16(data[0]) | (UInt16(data[1]) << 8)
-            return signed ? Int(Int16(bitPattern: v)) : Int(v)
-        case 4:
-            let v = UInt32(data[0]) | (UInt32(data[1]) << 8)
-                  | (UInt32(data[2]) << 16) | (UInt32(data[3]) << 24)
-            return signed ? Int(Int32(bitPattern: v)) : Int(v)
-        default: return 0
-        }
-    }
-
-    private func dataValue(from value: Int, length: Int) -> Data {
-        var d = Data(count: length)
-        switch length {
-        case 1: d[0] = UInt8(truncatingIfNeeded: value)
-        case 2:
-            let v = UInt16(truncatingIfNeeded: value)
-            d[0] = UInt8(v & 0xFF); d[1] = UInt8(v >> 8)
-        case 4:
-            let v = UInt32(truncatingIfNeeded: value)
-            d[0] = UInt8(v & 0xFF); d[1] = UInt8((v >> 8) & 0xFF)
-            d[2] = UInt8((v >> 16) & 0xFF); d[3] = UInt8((v >> 24) & 0xFF)
-        default: break
-        }
-        return d
-    }
-
     // MARK: - Public Slider Controls
 
     func getValue(for control: UVCControl, request: UVCRequest = .getCurrent) throws -> Int {
         let data = try sendRequest(request, control: control)
-        return intValue(from: data, signed: control.isSigned)
+        return UVCValueCodec.decode(data, signed: control.isSigned)
     }
 
     func setValue(_ value: Int, for control: UVCControl) throws {
-        let payload = dataValue(from: value, length: control.dataLength)
+        let payload = UVCValueCodec.encode(value, length: control.dataLength)
         let unitID = unitID(for: control)
         let wValue = UInt16(control.selector) << 8
         let wIndex = (UInt16(unitID) << 8) | UInt16(vcInterfaceNumber)
