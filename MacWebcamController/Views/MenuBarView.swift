@@ -5,6 +5,7 @@ struct MenuBarView: View {
     @Environment(CameraManager.self) private var cameraManager
     @Environment(CameraViewModel.self) private var viewModel
     @Environment(\.openWindow) private var openWindow
+    @AppStorage("showPreviewInMenuBar") private var showPreviewInMenuBar = false
     // Controls shown in the compact popover
     private let quickControls: [UVCControl] = [
         .brightness, .contrast, .whiteBalanceTemperature, .exposureAbsolute, .focusAbsolute
@@ -15,13 +16,21 @@ struct MenuBarView: View {
             HStack {
                 CameraPickerView()
                 Spacer()
-                if viewModel.selectedCamera != nil {
+                if viewModel.hasSupportedControls {
                     CompactButton(help: "Reset all controls to defaults") {
                         viewModel.resetToDefaults()
                     } label: {
                         Image(systemName: "arrow.counterclockwise")
                     }
                 }
+            }
+
+            if showPreviewInMenuBar, let cameraID = viewModel.selectedCamera?.id {
+                CameraPreviewView(cameraID: cameraID)
+                    .aspectRatio(16 / 9, contentMode: .fit)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 176)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
             }
 
             if viewModel.isLoading {
@@ -34,17 +43,19 @@ struct MenuBarView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .center)
             } else if viewModel.selectedCamera != nil {
-                Divider()
+                if hasSupportedQuickControls {
+                    Divider()
 
-                ForEach(quickControls) { control in
-                    if let state = viewModel.controls[control], state.isSupported {
-                        ControlSliderView(
-                            control: control,
-                            state: state,
-                            onValueChanged: { value in viewModel.setValue(value, for: control) },
-                            isSliderDisabled: isAutoEnabled(for: control)
-                        ) {
-                            autoToggle(for: control)
+                    ForEach(quickControls) { control in
+                        if let state = viewModel.controls[control], state.isSupported {
+                            ControlSliderView(
+                                control: control,
+                                state: state,
+                                onValueChanged: { value in viewModel.setValue(value, for: control) },
+                                isSliderDisabled: isAutoEnabled(for: control)
+                            ) {
+                                autoToggle(for: control)
+                            }
                         }
                     }
                 }
@@ -64,10 +75,13 @@ struct MenuBarView: View {
                     .frame(maxWidth: .infinity)
             }
 
-            Divider()
+            if hasSupportedQuickControls {
+                Divider()
+            }
 
             HStack(spacing: 6) {
                 CompactButton(help: "Open full controls window") {
+                    viewModel.showingSettings = false
                     openWindow(id: "main")
                     NSApp.activate(ignoringOtherApps: true)
                 } label: {
@@ -77,6 +91,7 @@ struct MenuBarView: View {
                 Spacer()
 
                 CompactButton(help: "Settings", horizontalPadding: 16) {
+                    viewModel.showingSettings = true
                     openWindow(id: "main")
                     NSApp.activate(ignoringOtherApps: true)
                 } label: {
@@ -92,6 +107,12 @@ struct MenuBarView: View {
         }
         .padding(14)
         .frame(width: 340)
+    }
+
+    private var hasSupportedQuickControls: Bool {
+        quickControls.contains { control in
+            viewModel.controls[control]?.isSupported == true
+        }
     }
 
     private func isAutoEnabled(for control: UVCControl) -> Bool {

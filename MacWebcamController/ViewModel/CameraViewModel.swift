@@ -8,6 +8,7 @@ import Observation
 final class CameraViewModel {
     var selectedCamera: CameraInfo?
     var selectedCameraID: String?
+    var showingSettings: Bool = false
     /// Tracks the last explicitly selected camera so it can be auto-reselected on reconnect.
     /// ID may change when plugged into a different port, so we keep the name as a fallback.
     private(set) var lastSelectedCameraID: String?
@@ -15,6 +16,10 @@ final class CameraViewModel {
     var controls: [UVCControl: ControlState] = [:]
     var errorMessage: String?
     var isLoading: Bool = false
+
+    var hasSupportedControls: Bool {
+        controls.values.contains { $0.isSupported }
+    }
 
     // Auto-mode state
     var autoExposureEnabled: Bool = false

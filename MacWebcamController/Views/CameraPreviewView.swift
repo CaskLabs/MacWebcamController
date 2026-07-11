@@ -13,6 +13,10 @@ struct CameraPreviewView: NSViewRepresentable {
     func updateNSView(_ nsView: CameraPreviewNSView, context: Context) {
         nsView.updateDevice(cameraID)
     }
+
+    static func dismantleNSView(_ nsView: CameraPreviewNSView, coordinator: ()) {
+        nsView.updateDevice(nil)
+    }
 }
 
 // MARK: - NSView

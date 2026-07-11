@@ -21,6 +21,7 @@ enum AppearanceMode: String, CaseIterable {
 
 struct SettingsView: View {
     @AppStorage("appearanceMode") private var appearanceRaw: String = AppearanceMode.system.rawValue
+    @AppStorage("showPreviewInMenuBar") private var showPreviewInMenuBar = false
     @State private var launchAtLogin: Bool = false
 
     private var appearance: AppearanceMode {
@@ -46,6 +47,8 @@ struct SettingsView: View {
             }
 
             Section("General") {
+                Toggle("Show Camera Preview in Menu Bar", isOn: $showPreviewInMenuBar)
+
                 Toggle("Launch at Login", isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { _, enabled in
                         setLaunchAtLogin(enabled)

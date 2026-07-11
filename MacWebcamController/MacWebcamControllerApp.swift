@@ -4,6 +4,7 @@ import SwiftUI
 private class AppDelegate: NSObject, NSApplicationDelegate {
     /// Set by the SwiftUI App to open a window by ID.
     var openWindowHandler: ((String) -> Void)?
+    var openSettingsHandler: (() -> Void)?
 
     private weak var statusBarButton: NSStatusBarButton?
     private var originalTarget: AnyObject?
@@ -97,7 +98,7 @@ private class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func openSettings() {
-        openWindowHandler?("main")
+        openSettingsHandler?()
     }
 
     @objc private func windowCountChanged(_ notification: Notification) {
@@ -129,6 +130,11 @@ struct MacWebcamControllerApp: App {
                 .onAppear {
                     appDelegate.openWindowHandler = { id in
                         openWindow(id: id)
+                        NSApp.activate(ignoringOtherApps: true)
+                    }
+                    appDelegate.openSettingsHandler = {
+                        viewModel.showingSettings = true
+                        openWindow(id: "main")
                         NSApp.activate(ignoringOtherApps: true)
                     }
                 }

@@ -3,18 +3,17 @@ import SwiftUI
 struct MainWindowView: View {
     @Environment(CameraManager.self) private var cameraManager
     @Environment(CameraViewModel.self) private var viewModel
-    @State private var showingSettings = false
 
     var body: some View {
         VStack(spacing: 0) {
             // Header
             HStack {
-                if showingSettings {
+                if viewModel.showingSettings {
                     Text("Settings")
                         .font(.headline)
                 } else {
                     CameraPickerView()
-                    if viewModel.selectedCamera != nil {
+                    if viewModel.hasSupportedControls {
                         Button("Reset All") {
                             viewModel.resetToDefaults()
                         }
@@ -23,9 +22,9 @@ struct MainWindowView: View {
                 }
                 Spacer()
                 Button {
-                    withAnimation { showingSettings.toggle() }
+                    withAnimation { viewModel.showingSettings.toggle() }
                 } label: {
-                    Image(systemName: showingSettings ? "camera" : "gear")
+                    Image(systemName: viewModel.showingSettings ? "camera" : "gear")
                 }
                 .keyboardShortcut(",", modifiers: .command)
             }
@@ -34,7 +33,7 @@ struct MainWindowView: View {
 
             Divider()
 
-            if showingSettings {
+            if viewModel.showingSettings {
                 SettingsView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if viewModel.isLoading {

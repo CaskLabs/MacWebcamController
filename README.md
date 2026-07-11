@@ -1,8 +1,6 @@
 # MacWebcamController
 
-A lightweight macOS menu bar app to control UVC camera settings —
-brightness, contrast, saturation, white balance, focus, and more —
-directly from your menu bar or a full standalone window.
+A lightweight macOS menu bar app to control UVC camera settings — brightness, contrast, saturation, white balance, focus, and more — directly from your menu bar or a full standalone window.
 
 > **Inspired by [CameraController](https://github.com/itaybre/CameraController)**,
 > which is no longer actively maintained. MacWebcamController is a
@@ -12,12 +10,12 @@ directly from your menu bar or a full standalone window.
 
 ## Features
 
-- 📷 **Supports any UVC-compliant USB camera** with 🎛️ **full UVC control surface**
-- 🎥 **Live camera preview**
+- 📷 **Supports UVC-compliant USB cameras** and automatically shows the controls each device reports
 - 🖥️ **Menu bar mode** and 🪟 **Standalone window mode**
+- 🎥 **Live camera preview** in the full window and, optionally, directly in the menu bar popover
 - 🤖 **Auto exposure, auto white balance & auto focus toggles**
 - 💾 **Camera presets**
-- 🔄 **Per-camera settings persistence**
+- 🔄 **Per-camera settings persistence**, including automatic restore after reconnecting or changing USB ports
 - 🔃 **Reset all controls to device defaults** — one-click button in the menu bar and full window
 - 🚀 **Launch at Login**
 - 🍎 **Native macOS app** — built with SwiftUI + AppKit, no external dependencies
@@ -26,7 +24,7 @@ directly from your menu bar or a full standalone window.
 
 ## Requirements
 
-- **macOS 26 (Tahoe)** or later (older version might work, but were not tested)
+- **macOS 26 (Tahoe)** or later on Apple Silicon
 - An external USB UVC-compliant camera
   _(built-in FaceTime cameras have limited UVC support due to Apple restrictions)_
 - Xcode 26 or later (to build from source)
@@ -55,7 +53,8 @@ Later on it might be available through Homebrew.
 - **Auto toggles** — Auto Exposure toggle appears above the exposure slider in both the popover and the full window; Auto White Balance and Auto Focus work the same way
 - **Reset button** — the ↺ button next to the camera picker in the menu bar resets all controls to device defaults
 - **Full controls** — click "Open Full Controls" (or right-click the icon) to open the main window with all UVC controls organised in collapsible sections
-- **Settings** — click the gear icon in the popover footer or the main window to open the settings page (appearance, launch at login)
+- **Menu bar preview** — enable "Show Camera Preview in Menu Bar" in Settings to add a 16:9 live preview to the compact popover
+- **Settings** — click the gear icon in the popover footer, the main window, or the menu bar icon's right-click menu to open the settings page (appearance, menu bar preview, launch at login)
 - **Presets** — in the Presets section, click + to save the current settings as a named preset; apply, update, or delete presets at any time
 - **Reset** — click "Reset" to restore all controls to their device defaults
 
@@ -93,8 +92,9 @@ MacWebcamController/
 - UI: SwiftUI + AppKit
 - Camera discovery: AVFoundation
 - UVC control: IOKit / IOUSBHost (direct USB control requests, no external libraries)
-- Persistence: UserDefaults (per camera, keyed by device ID)
+- Persistence: UserDefaults (per camera, matched by device ID with a camera-name fallback after USB port changes)
 - Concurrency: Swift 6 strict concurrency, dedicated serial DispatchQueue for IOKit I/O
+- Tests: XCTest coverage for UVC descriptor parsing, value encoding, settings persistence, and camera matching
 
 ---
 
@@ -130,7 +130,8 @@ Auto exposure, auto white balance and auto focus toggles are shown only when the
 ## Planned / TODO
 
 - [ ] **First Release**
-- [ ] **Live preview in menu bar popover** — show a 16:9 camera preview directly in the compact popover. Blocked by a macOS AVFoundation limitation: two `AVCaptureSession` instances cannot capture the same device simultaneously. Requires sharing a single session between the menu bar and main window previews, which needs further investigation.
+- [ ] **Resizable Camera Preview in window mode**
+- [ ] **Optimization of the window mode for bigger screens**
 - [ ] **iCloud Sync Settings** (optional)
 
 ---
