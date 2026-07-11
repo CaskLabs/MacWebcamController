@@ -39,10 +39,7 @@ Download the latest version from the [GitHub Releases page](https://github.com/C
 
 Homebrew
 ```bash
-brew tap CaskLabs/homebrew-tap
-```
-```bash 
-brew install --cask macwebcamcontroller
+brew install --cask CaskLabs/tap/macwebcamcontroller
 ```
 
 >[!NOTE]
