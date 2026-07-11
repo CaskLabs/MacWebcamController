@@ -2,6 +2,10 @@
 
 A lightweight macOS menu bar app to control UVC camera settings — brightness, contrast, saturation, white balance, focus, and more — directly from your menu bar or a full standalone window.
 
+<p align="center">
+  <img src="docs/images/macwebcamcontroller-app.png" alt="MacWebcamController window showing a live camera preview, image controls, and presets" width="900">
+</p>
+
 > **Inspired by [CameraController](https://github.com/itaybre/CameraController)**,
 > which is no longer actively maintained. MacWebcamController is a
 > modern, open-source rewrite built with SwiftUI and native IOKit.

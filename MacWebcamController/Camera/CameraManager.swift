@@ -20,7 +20,10 @@ final class CameraManager {
 
     func startDiscovery() {
         let session = AVCaptureDevice.DiscoverySession(
-            deviceTypes: [.external],
+            deviceTypes: [
+                .external,
+                .builtInWideAngleCamera
+            ],
             mediaType: .video,
             position: .unspecified
         )
