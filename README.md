@@ -56,6 +56,7 @@ Build from Source
 1. Clone the repository.
 2. Open `MacWebcamController.xcodeproj` in Xcode 26 or later.
 3. Select your Mac and build and run with ⌘R.
+   
 No additional configuration is needed — the app has the sandbox disabled to allow direct IOKit USB access.
 
 ---
