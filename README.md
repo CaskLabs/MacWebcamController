@@ -148,7 +148,6 @@ Auto exposure, auto white balance and auto focus toggles are shown only when the
 
 ## Planned / TODO
 
-- [ ] **First Release**
 - [ ] **Resizable Camera Preview in window mode**
 - [ ] **Optimization of the window mode for bigger screens**
 - [ ] **iCloud Sync Settings** (optional)
