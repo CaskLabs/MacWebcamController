@@ -38,14 +38,22 @@ A lightweight macOS menu bar app to control UVC camera settings — brightness, 
 Download the latest version from the [GitHub Releases page](https://github.com/CaskLabs/MacWebcamController/releases), move MacWebcamController.app to your Applications folder, and open it.
 
 Homebrew
-```bash brew tap CaskLabs/homebrew-tap```
-```bash brew install --cask macwebcamcontroller```
+```bash
+brew tap CaskLabs/homebrew-tap
+```
+```bash 
+brew install --cask macwebcamcontroller
+```
 
 >[!NOTE]
-> Current builds are unsigned and not notarized. If macOS blocks the app, allow it under System Settings → Privacy & Security → Open Anyway.
+> Current builds are unsigned and not notarized.
+> If macOS blocks the app, allow it under System Settings → Privacy & Security → Open Anyway.
 >
 > Alternatively:
-> ```bash xattr -dr com.apple.quarantine /Applications/MacWebcamController.app```
+>
+> ```bash
+> xattr -dr com.apple.quarantine /Applications/MacWebcamController.app
+> ```
 
 Build from Source
 1. Clone the repository
