@@ -43,6 +43,7 @@ Homebrew
 
 >[!NOTE]
 > Current builds are unsigned and not notarized. If macOS blocks the app, allow it under System Settings → Privacy & Security → Open Anyway.
+>
 > Alternatively:
 > ```bash xattr -dr com.apple.quarantine /Applications/MacWebcamController.app```
 
