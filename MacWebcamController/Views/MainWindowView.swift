@@ -4,70 +4,79 @@ struct MainWindowView: View {
     @Environment(CameraManager.self) private var cameraManager
     @Environment(CameraViewModel.self) private var viewModel
 
+    private let defaultPreviewHeight: CGFloat = 240
+
     var body: some View {
-        VStack(spacing: 0) {
-            // Header
-            HStack {
-                if viewModel.showingSettings {
-                    Text("Settings")
-                        .font(.headline)
-                } else {
-                    CameraPickerView()
-                    if viewModel.hasSupportedControls {
-                        Button("Reset All") {
-                            viewModel.resetToDefaults()
+        GeometryReader { geometry in
+            VStack(spacing: 0) {
+                // Header
+                HStack {
+                    if viewModel.showingSettings {
+                        Text("Settings")
+                            .font(.headline)
+                    } else {
+                        CameraPickerView()
+                        if viewModel.hasSupportedControls {
+                            Button("Reset All") {
+                                viewModel.resetToDefaults()
+                            }
+                            .keyboardShortcut("r", modifiers: .command)
                         }
-                        .keyboardShortcut("r", modifiers: .command)
                     }
+                    Spacer()
+                    Button {
+                        withAnimation { viewModel.showingSettings.toggle() }
+                    } label: {
+                        Image(systemName: viewModel.showingSettings ? "camera" : "gear")
+                    }
+                    .keyboardShortcut(",", modifiers: .command)
                 }
-                Spacer()
-                Button {
-                    withAnimation { viewModel.showingSettings.toggle() }
-                } label: {
-                    Image(systemName: viewModel.showingSettings ? "camera" : "gear")
-                }
-                .keyboardShortcut(",", modifiers: .command)
-            }
-            .padding()
-            .background(.bar)
-
-            Divider()
-
-            if viewModel.showingSettings {
-                SettingsView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if viewModel.isLoading {
-                ProgressView("Loading camera controls…")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if viewModel.selectedCamera != nil {
-                // Live preview — fixed 16:9 aspect ratio, max 240pt tall
-                CameraPreviewView(cameraID: viewModel.selectedCamera?.id)
-                    .aspectRatio(16 / 9, contentMode: .fit)
-                    .frame(maxHeight: 240)
-                    .background(.black)
+                .padding()
+                .background(.bar)
 
                 Divider()
 
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 12, pinnedViews: []) {
-                        ControlSection(title: "Image", controls: [
-                            .brightness, .contrast, .saturation, .sharpness, .gamma
-                        ])
-                        ExposureSection()
-                        FocusSection()
-                        WhiteBalanceSection()
-                        AntiFlickerSection()
-                        PresetsSection()
+                if viewModel.showingSettings {
+                    SettingsView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if viewModel.isLoading {
+                    ProgressView("Loading camera controls…")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if viewModel.selectedCamera != nil {
+                    VSplitView {
+                        CameraPreviewView(cameraID: viewModel.selectedCamera?.id)
+                            .frame(
+                                minWidth: 0,
+                                maxWidth: .infinity,
+                                minHeight: defaultPreviewHeight,
+                                idealHeight: defaultPreviewHeight,
+                                maxHeight: geometry.size.height / 2
+                            )
+                            .background(.black)
+
+                        ScrollView {
+                            LazyVStack(alignment: .leading, spacing: 12, pinnedViews: []) {
+                                ControlSection(title: "Image", controls: [
+                                    .brightness, .contrast, .saturation, .sharpness, .gamma
+                                ])
+                                ExposureSection()
+                                FocusSection()
+                                WhiteBalanceSection()
+                                AntiFlickerSection()
+                                PresetsSection()
+                            }
+                            .padding()
+                        }
+                        .scrollContentBackground(.hidden)
+                        .layoutPriority(1)
                     }
-                    .padding()
+                } else {
+                    ContentUnavailableView(
+                        "No Camera Selected",
+                        systemImage: "camera",
+                        description: Text("Connect a USB UVC camera and select it from the menu above.")
+                    )
                 }
-                .scrollContentBackground(.hidden)
-            } else {
-                ContentUnavailableView(
-                    "No Camera Selected",
-                    systemImage: "camera",
-                    description: Text("Connect a USB UVC camera and select it from the menu above.")
-                )
             }
         }
         .frame(minWidth: 400, minHeight: 500)
