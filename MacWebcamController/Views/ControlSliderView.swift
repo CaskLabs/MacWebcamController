@@ -44,25 +44,20 @@ struct ControlSliderView<Accessory: View>: View {
                         Slider(
                             value: $localValue,
                             in: Double(state.minimum)...Double(state.maximum),
-                            step: 1.0,
                             onEditingChanged: { editing in
                                 isDragging = editing
                                 if !editing {
                                     // Dragging ended — flush immediately without waiting for debounce
                                     debounceTask?.cancel()
-                                    let res = max(1, state.resolution)
-                                    let snapped = (Int(localValue.rounded()) / res) * res
-                                    let clamped = max(state.minimum, min(state.maximum, snapped))
-                                    onValueChanged(clamped)
+                                    let snapped = snapToValidValue(localValue)
+                                    localValue = Double(snapped)
+                                    onValueChanged(snapped)
                                 }
                             }
                         )
                         .onChange(of: localValue) { _, newVal in
                             guard isDragging else { return }
-                            let res = max(1, state.resolution)
-                            let snapped = (Int(newVal.rounded()) / res) * res
-                            let clamped = max(state.minimum, min(state.maximum, snapped))
-                            scheduleUpdate(clamped)
+                            scheduleUpdate(snapToValidValue(newVal))
                         }
                     } else {
                         Slider(value: .constant(0))
@@ -90,6 +85,16 @@ struct ControlSliderView<Accessory: View>: View {
             guard !isDragging else { return }
             localValue = Double(newValue)
         }
+    }
+
+    /// Snaps a slider value to the device's resolution grid, which starts at
+    /// the control's minimum rather than at zero, and keeps it in range.
+    private func snapToValidValue(_ value: Double) -> Int {
+        let resolution = max(1, state.resolution)
+        let offset = value - Double(state.minimum)
+        let steps = (offset / Double(resolution)).rounded()
+        let snapped = state.minimum + Int(steps) * resolution
+        return max(state.minimum, min(state.maximum, snapped))
     }
 
     @MainActor

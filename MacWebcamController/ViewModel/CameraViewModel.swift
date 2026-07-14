@@ -165,11 +165,13 @@ final class CameraViewModel {
             wbAutoEnabled = (try? device.getWhiteBalanceAuto()) ?? false
         }
 
-        let focusAutoSupported = device.isFocusAutoSupported
-        var focusAutoEnabled = false
-        if focusAutoSupported {
-            focusAutoEnabled = (try? device.getFocusAuto()) ?? false
-        }
+        // Focus Auto is D17 in the Camera Terminal descriptor. Some cameras omit
+        // that capability bit even though selector 0x08 works, so also probe the
+        // control directly before deciding whether to show the Auto Focus toggle.
+        let focusAutoAdvertised = device.isFocusAutoSupported
+        let focusAutoValue = try? device.getFocusAuto()
+        let focusAutoSupported = focusAutoAdvertised || focusAutoValue != nil
+        let focusAutoEnabled = focusAutoValue ?? false
 
         let finalControls = updated
         let anySupported = finalControls.values.contains { $0.isSupported }
@@ -252,6 +254,7 @@ final class CameraViewModel {
                         autoLocked = true
                         Task { @MainActor [weak self] in
                             guard let self, self.selectedCamera?.id == cameraID else { return }
+                            self.focusAutoSupported = true
                             self.focusAutoEnabled = true
                         }
                     }
@@ -347,59 +350,103 @@ final class CameraViewModel {
 
     func resetToDefaults() {
         for control in UVCControl.allCases {
-            if let state = controls[control], state.isSupported {
-                setValue(state.defaultValue, for: control)
-            }
-        }
-    }
-
-    func resetControl(_ control: UVCControl) {
-        if let state = controls[control], state.isSupported {
+            guard let state = controls[control], state.isSupported else { continue }
+            guard !control.isManagedAutomatically(
+                autoExposure: autoExposureEnabled,
+                autoWhiteBalance: whiteBalanceAutoEnabled,
+                autoFocus: focusAutoEnabled
+            ) else { continue }
             setValue(state.defaultValue, for: control)
         }
     }
 
+    func resetControl(_ control: UVCControl) {
+        guard let state = controls[control], state.isSupported else { return }
+        guard !control.isManagedAutomatically(
+            autoExposure: autoExposureEnabled,
+            autoWhiteBalance: whiteBalanceAutoEnabled,
+            autoFocus: focusAutoEnabled
+        ) else { return }
+        setValue(state.defaultValue, for: control)
+    }
+
     // MARK: - Presets
+
+    private func currentPresetValues() -> [String: Int] {
+        controls.reduce(into: [String: Int]()) { values, entry in
+            let (control, state) = entry
+            guard state.isSupported,
+                  !control.isManagedAutomatically(
+                      autoExposure: autoExposureEnabled,
+                      autoWhiteBalance: whiteBalanceAutoEnabled,
+                      autoFocus: focusAutoEnabled
+                  ) else { return }
+            values[control.rawValue] = state.currentValue
+        }
+    }
 
     func savePreset(name: String) {
         guard let cameraID = selectedCamera?.id else { return }
-        let values = controls.compactMapValues { state -> Int? in
-            state.isSupported ? state.currentValue : nil
-        }.reduce(into: [String: Int]()) { dict, pair in
-            dict[pair.key.rawValue] = pair.value
-        }
         let preset = CameraPreset(
             name: name,
-            values: values,
+            values: currentPresetValues(),
             autoExposureEnabled: autoExposureSupported ? autoExposureEnabled : nil,
-            whiteBalanceAutoEnabled: whiteBalanceAutoSupported ? whiteBalanceAutoEnabled : nil
+            whiteBalanceAutoEnabled: whiteBalanceAutoSupported ? whiteBalanceAutoEnabled : nil,
+            focusAutoEnabled: focusAutoSupported ? focusAutoEnabled : nil
         )
         presets.append(preset)
         SettingsPersistence().savePresets(presets, cameraID: cameraID)
     }
 
     func applyPreset(_ preset: CameraPreset) {
+        // Disable automatic modes before applying their manual values. All USB
+        // operations use the same serial queue, so this ordering also reaches the
+        // camera in the correct sequence. Automatic modes are enabled afterwards,
+        // allowing the saved manual baseline to be restored first.
+        if preset.autoExposureEnabled == false, autoExposureSupported {
+            setAutoExposure(false)
+        }
+        if preset.whiteBalanceAutoEnabled == false, whiteBalanceAutoSupported {
+            setWhiteBalanceAuto(false)
+        }
+        if preset.focusAutoEnabled == false, focusAutoSupported {
+            setFocusAuto(false)
+        }
+
+        // A nil mode is from an older preset. In that case retain the current
+        // mode and avoid writing a manual value while that mode is active.
+        let effectiveAutoExposure = preset.autoExposureEnabled ?? autoExposureEnabled
+        let effectiveAutoWhiteBalance = preset.whiteBalanceAutoEnabled ?? whiteBalanceAutoEnabled
+        let effectiveAutoFocus = preset.focusAutoEnabled ?? focusAutoEnabled
+
         for (rawValue, value) in preset.values {
             guard let control = UVCControl(rawValue: rawValue) else { continue }
+            guard !control.isManagedAutomatically(
+                autoExposure: effectiveAutoExposure,
+                autoWhiteBalance: effectiveAutoWhiteBalance,
+                autoFocus: effectiveAutoFocus
+            ) else { continue }
             setValue(value, for: control)
         }
-        if let ae = preset.autoExposureEnabled, autoExposureSupported {
-            setAutoExposure(ae)
+
+        if preset.autoExposureEnabled == true, autoExposureSupported {
+            setAutoExposure(true)
         }
-        if let wb = preset.whiteBalanceAutoEnabled, whiteBalanceAutoSupported {
-            setWhiteBalanceAuto(wb)
+        if preset.whiteBalanceAutoEnabled == true, whiteBalanceAutoSupported {
+            setWhiteBalanceAuto(true)
+        }
+        if preset.focusAutoEnabled == true, focusAutoSupported {
+            setFocusAuto(true)
         }
     }
 
     func updatePreset(_ preset: CameraPreset) {
         guard let cameraID = selectedCamera?.id,
               let index = presets.firstIndex(where: { $0.id == preset.id }) else { return }
-        let values = controls.reduce(into: [String: Int]()) { dict, pair in
-            if pair.value.isSupported { dict[pair.key.rawValue] = pair.value.currentValue }
-        }
-        presets[index].values = values
+        presets[index].values = currentPresetValues()
         presets[index].autoExposureEnabled = autoExposureSupported ? autoExposureEnabled : nil
         presets[index].whiteBalanceAutoEnabled = whiteBalanceAutoSupported ? whiteBalanceAutoEnabled : nil
+        presets[index].focusAutoEnabled = focusAutoSupported ? focusAutoEnabled : nil
         SettingsPersistence().savePresets(presets, cameraID: cameraID)
     }
 

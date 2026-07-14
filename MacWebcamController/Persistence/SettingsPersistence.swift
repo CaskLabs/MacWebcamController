@@ -8,15 +8,18 @@ struct CameraPreset: Codable, Identifiable {
     var values: [String: Int]  // UVCControl.rawValue → Int
     var autoExposureEnabled: Bool?
     var whiteBalanceAutoEnabled: Bool?
+    var focusAutoEnabled: Bool?
 
     init(name: String, values: [String: Int],
          autoExposureEnabled: Bool? = nil,
-         whiteBalanceAutoEnabled: Bool? = nil) {
+         whiteBalanceAutoEnabled: Bool? = nil,
+         focusAutoEnabled: Bool? = nil) {
         self.id = UUID()
         self.name = name
         self.values = values
         self.autoExposureEnabled = autoExposureEnabled
         self.whiteBalanceAutoEnabled = whiteBalanceAutoEnabled
+        self.focusAutoEnabled = focusAutoEnabled
     }
 }
 

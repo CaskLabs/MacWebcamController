@@ -6,6 +6,7 @@ struct MenuBarView: View {
     @Environment(CameraViewModel.self) private var viewModel
     @Environment(\.openWindow) private var openWindow
     @AppStorage("showPreviewInMenuBar") private var showPreviewInMenuBar = false
+    @State private var isMenuPreviewActive = false
     // Controls shown in the compact popover
     private let quickControls: [UVCControl] = [
         .brightness, .contrast, .whiteBalanceTemperature, .exposureAbsolute, .focusAbsolute
@@ -26,11 +27,49 @@ struct MenuBarView: View {
             }
 
             if showPreviewInMenuBar, let cameraID = viewModel.selectedCamera?.id {
-                CameraPreviewView(cameraID: cameraID)
-                    .aspectRatio(16 / 9, contentMode: .fit)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 176)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                if isMenuPreviewActive {
+                    ZStack(alignment: .topTrailing) {
+                        CameraPreviewView(
+                            cameraID: cameraID,
+                            releaseImmediatelyWhenRemoved: true
+                        )
+                        .aspectRatio(16 / 9, contentMode: .fit)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 176)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                        Button {
+                            isMenuPreviewActive = false
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.title3)
+                                .symbolRenderingMode(.palette)
+                                .foregroundStyle(.white, .black.opacity(0.55))
+                        }
+                        .buttonStyle(.plain)
+                        .padding(7)
+                    }
+                } else {
+                    Button {
+                        isMenuPreviewActive = true
+                    } label: {
+                        VStack(spacing: 8) {
+                            Image(systemName: "video")
+                                .font(.title2)
+                            Text("Show Preview")
+                                .font(.body)
+                            Text("The camera remains available to other apps until requested.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 146)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+                }
             }
 
             if viewModel.isLoading {
@@ -107,6 +146,14 @@ struct MenuBarView: View {
         }
         .padding(14)
         .frame(width: 340)
+        .onDisappear {
+            isMenuPreviewActive = false
+        }
+        .onChange(of: showPreviewInMenuBar) { _, enabled in
+            if !enabled {
+                isMenuPreviewActive = false
+            }
+        }
     }
 
     private var hasSupportedQuickControls: Bool {

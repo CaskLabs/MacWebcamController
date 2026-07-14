@@ -118,12 +118,14 @@ struct MacWebcamControllerApp: App {
     @Environment(\.openWindow) private var openWindow
     @State private var cameraManager = CameraManager()
     @State private var viewModel = CameraViewModel()
+    @State private var previewController = CameraPreviewController()
 
     var body: some Scene {
         MenuBarExtra("MacWebcamController", systemImage: "camera") {
             MenuBarView()
                 .environment(cameraManager)
                 .environment(viewModel)
+                .environment(previewController)
                 .onChange(of: cameraManager.cameras) { _, cameras in
                     handleCameraListChange(cameras)
                 }
@@ -145,6 +147,7 @@ struct MacWebcamControllerApp: App {
             MainWindowView()
                 .environment(cameraManager)
                 .environment(viewModel)
+                .environment(previewController)
                 .onChange(of: cameraManager.cameras) { _, cameras in
                     handleCameraListChange(cameras)
                 }

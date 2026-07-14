@@ -74,7 +74,9 @@ enum UVCDeviceDiscovery {
 
         print("[UVC Discovery]   \(name) VID:0x\(String(vendorID, radix: 16)) PID:0x\(String(productID, radix: 16)) LOC:0x\(String(locationID, radix: 16))")
 
-        // Open IOUSBHostDevice — try without options first, then with deviceCapture
+        // Open without capturing the physical USB device. `.deviceCapture` would
+        // terminate the camera's AVFoundation/USB drivers and can trigger a
+        // disconnect/reconnect loop while the live preview is running.
         let hostDevice: IOUSBHostDevice
         do {
             hostDevice = try IOUSBHostDevice(
@@ -86,18 +88,7 @@ enum UVCDeviceDiscovery {
             print("[UVC Discovery]   Opened IOUSBHostDevice (no capture)")
         } catch {
             print("[UVC Discovery]   IOUSBHostDevice (no capture) failed: \(error)")
-            do {
-                hostDevice = try IOUSBHostDevice(
-                    __ioService: deviceService,
-                    options: .deviceCapture,
-                    queue: nil,
-                    interestHandler: nil
-                )
-                print("[UVC Discovery]   Opened IOUSBHostDevice (with deviceCapture)")
-            } catch {
-                print("[UVC Discovery]   IOUSBHostDevice (deviceCapture) also failed: \(error)")
-                return nil
-            }
+            return nil
         }
 
         // Read configuration descriptor

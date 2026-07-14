@@ -188,12 +188,16 @@ private struct ExposureSection: View {
                     ControlSliderView(control: .gain, state: state) { value in
                         viewModel.setValue(value, for: .gain)
                     }
+                    .disabled(viewModel.autoExposureEnabled)
+                    .opacity(viewModel.autoExposureEnabled ? 0.4 : 1.0)
                 }
 
                 if hasBacklight, let state = viewModel.controls[.backlightCompensation] {
                     ControlSliderView(control: .backlightCompensation, state: state) { value in
                         viewModel.setValue(value, for: .backlightCompensation)
                     }
+                    .disabled(viewModel.autoExposureEnabled)
+                    .opacity(viewModel.autoExposureEnabled ? 0.4 : 1.0)
                 }
             }
         }
@@ -265,19 +269,28 @@ private struct FocusSection: View {
 private struct AntiFlickerSection: View {
     @Environment(CameraViewModel.self) private var viewModel
 
+    private let options: [(label: String, value: Int)] = [
+        ("Disabled", 0), ("50 Hz", 1), ("60 Hz", 2)
+    ]
+
     var body: some View {
         if let state = viewModel.controls[.powerlineFrequency], state.isSupported {
             CollapsibleSection(title: "Anti-Flicker") {
-                Picker("Powerline Frequency", selection: Binding(
-                    get: { state.currentValue },
-                    set: { viewModel.setValue($0, for: .powerlineFrequency) }
-                )) {
-                    Text("Disabled").tag(0)
-                    Text("50 Hz").tag(1)
-                    Text("60 Hz").tag(2)
+                HStack(spacing: 6) {
+                    ForEach(options, id: \.value) { option in
+                        Button(option.label) {
+                            viewModel.setValue(option.value, for: .powerlineFrequency)
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .foregroundStyle(state.currentValue == option.value ? Color.white : Color.primary)
+                        .background(
+                            state.currentValue == option.value ? Color.accentColor : Color.secondary.opacity(0.12),
+                            in: RoundedRectangle(cornerRadius: 6)
+                        )
+                    }
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
             }
         }
     }

@@ -91,6 +91,12 @@ final class UVCDevice: @unchecked Sendable {
         self.productID = productID
     }
 
+    deinit {
+        // Release the user client and its notification port deterministically
+        // instead of waiting for IOUSBHostObject's automatic cleanup.
+        hostDevice.destroy()
+    }
+
     // MARK: - Configuration
 
     func configure(processingUnitID: UInt8, cameraTerminalID: UInt8,
@@ -141,8 +147,8 @@ final class UVCDevice: @unchecked Sendable {
     /// Whether the camera supports White Balance Temperature Auto (PU bmControls D12).
     var isWhiteBalanceAutoSupported: Bool { supportedPUControls & (1 << 12) != 0 }
 
-    /// Whether the camera supports Focus Auto (CT bmControls D6).
-    var isFocusAutoSupported: Bool { supportedCTControls & (1 << 6) != 0 }
+    /// Whether the camera supports Focus Auto (CT bmControls D17).
+    var isFocusAutoSupported: Bool { supportedCTControls & (1 << 17) != 0 }
 
     // MARK: - Core Control Request
 

@@ -31,23 +31,26 @@ struct SettingsView: View {
     var body: some View {
         Form {
             Section("Appearance") {
-                Picker("Color Scheme", selection: Binding(
-                    get: { appearance },
-                    set: { mode in
-                        appearanceRaw = mode.rawValue
-                        mode.apply()
-                    }
-                )) {
+                HStack(spacing: 6) {
                     ForEach(AppearanceMode.allCases, id: \.self) { mode in
-                        Text(mode.rawValue).tag(mode)
+                        Button(mode.rawValue) {
+                            appearanceRaw = mode.rawValue
+                            mode.apply()
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .foregroundStyle(appearance == mode ? Color.white : Color.primary)
+                        .background(
+                            appearance == mode ? Color.accentColor : Color.secondary.opacity(0.12),
+                            in: RoundedRectangle(cornerRadius: 6)
+                        )
                     }
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
             }
 
             Section("General") {
-                Toggle("Show Camera Preview in Menu Bar", isOn: $showPreviewInMenuBar)
+                Toggle("Enable On-Demand Preview in Menu Bar", isOn: $showPreviewInMenuBar)
 
                 Toggle("Launch at Login", isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { _, enabled in

@@ -82,4 +82,22 @@ enum UVCControl: String, CaseIterable, Identifiable, Sendable {
         case .focusAbsolute: "Focus"
         }
     }
+
+    /// Whether this manual control is managed by one of the active automatic modes.
+    func isManagedAutomatically(
+        autoExposure: Bool,
+        autoWhiteBalance: Bool,
+        autoFocus: Bool
+    ) -> Bool {
+        switch self {
+        case .exposureAbsolute, .gain, .backlightCompensation:
+            autoExposure
+        case .whiteBalanceTemperature:
+            autoWhiteBalance
+        case .focusAbsolute:
+            autoFocus
+        default:
+            false
+        }
+    }
 }

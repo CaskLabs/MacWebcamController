@@ -8,6 +8,8 @@ final class CameraManager {
     private(set) var cameras: [CameraInfo] = []
 
     private var discoverySession: AVCaptureDevice.DiscoverySession?
+    private var refreshInProgress = false
+    private var refreshPending = false
     // Observers stored outside @Observable tracking so deinit can release them
     // without hitting actor-isolation restrictions.
     private let observerBox = NotificationObserverBox()
@@ -54,7 +56,13 @@ final class CameraManager {
 
     /// Called when the camera list changes; observers can watch `cameras` for changes.
     func refreshCameras() {
+        if refreshInProgress {
+            refreshPending = true
+            return
+        }
+
         guard let session = discoverySession else { return }
+        refreshInProgress = true
         let avDevices = session.devices
 
         // Capture avDevices as Sendable array values before launching detached task
@@ -69,7 +77,14 @@ final class CameraManager {
                 )
             }
             await MainActor.run { [weak self] in
-                self?.cameras = infos
+                guard let self else { return }
+                self.cameras = infos
+                self.refreshInProgress = false
+
+                if self.refreshPending {
+                    self.refreshPending = false
+                    self.refreshCameras()
+                }
             }
         }
     }
