@@ -5,6 +5,7 @@ struct MainWindowView: View {
     @Environment(CameraViewModel.self) private var viewModel
 
     private let defaultPreviewHeight: CGFloat = 240
+    private let minimumSettingsWidth: CGFloat = 900
 
     var body: some View {
         GeometryReader { geometry in
@@ -38,6 +39,7 @@ struct MainWindowView: View {
 
                 if viewModel.showingSettings {
                     SettingsView()
+                        .frame(width: settingsWidth(for: geometry.size.width))
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if viewModel.isLoading {
                     ProgressView("Loading camera controls…")
@@ -49,10 +51,11 @@ struct MainWindowView: View {
                                 minWidth: 0,
                                 maxWidth: .infinity,
                                 minHeight: defaultPreviewHeight,
-                                idealHeight: defaultPreviewHeight,
+                                idealHeight: geometry.size.height / 2,
                                 maxHeight: geometry.size.height / 2
                             )
                             .background(.black)
+                            .layoutPriority(1)
 
                         ScrollView {
                             LazyVStack(alignment: .leading, spacing: 12, pinnedViews: []) {
@@ -66,9 +69,10 @@ struct MainWindowView: View {
                                 PresetsSection()
                             }
                             .padding()
+                            .frame(width: settingsWidth(for: geometry.size.width))
+                            .frame(maxWidth: .infinity)
                         }
                         .scrollContentBackground(.hidden)
-                        .layoutPriority(1)
                     }
                 } else {
                     ContentUnavailableView(
@@ -81,6 +85,10 @@ struct MainWindowView: View {
         }
         .frame(minWidth: 400, minHeight: 500)
         .navigationTitle("Camera Controls")
+    }
+
+    private func settingsWidth(for availableWidth: CGFloat) -> CGFloat {
+        min(availableWidth, minimumSettingsWidth)
     }
 }
 
