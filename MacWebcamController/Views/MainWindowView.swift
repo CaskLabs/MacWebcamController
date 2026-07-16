@@ -58,7 +58,7 @@ struct MainWindowView: View {
                             .layoutPriority(1)
 
                         ScrollView {
-                            LazyVStack(alignment: .leading, spacing: 12, pinnedViews: []) {
+                            VStack(alignment: .leading, spacing: 12) {
                                 ControlSection(title: "Image", controls: [
                                     .brightness, .contrast, .saturation, .sharpness, .gamma
                                 ])
