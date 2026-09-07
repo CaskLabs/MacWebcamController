@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct ControlSliderView<Accessory: View>: View {
+    @Environment(\.isEnabled) private var isEnabled
+
     let control: UVCControl
     let state: ControlState
     var onValueChanged: (Int) -> Void
@@ -59,6 +61,13 @@ struct ControlSliderView<Accessory: View>: View {
                             guard isDragging else { return }
                             scheduleUpdate(snapToValidValue(newVal))
                         }
+                        .simultaneousGesture(
+                            TapGesture(count: 2)
+                                .onEnded {
+                                    resetToDefault()
+                                }
+                        )
+                        .help("Double-click to reset to the default value")
                     } else {
                         Slider(value: .constant(0))
                             .disabled(true)
@@ -95,6 +104,15 @@ struct ControlSliderView<Accessory: View>: View {
         let steps = (offset / Double(resolution)).rounded()
         let snapped = state.minimum + Int(steps) * resolution
         return max(state.minimum, min(state.maximum, snapped))
+    }
+
+    private func resetToDefault() {
+        guard isEnabled && !isSliderDisabled else { return }
+
+        debounceTask?.cancel()
+        let defaultValue = snapToValidValue(Double(state.defaultValue))
+        localValue = Double(defaultValue)
+        onValueChanged(defaultValue)
     }
 
     @MainActor
