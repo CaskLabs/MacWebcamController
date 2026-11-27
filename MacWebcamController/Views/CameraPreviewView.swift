@@ -194,9 +194,9 @@ private final class CameraPreviewEngine: @unchecked Sendable {
         }
         if session.isRunning {
             publish(.running)
-        } else if session.isInterrupted {
-            publish(.interrupted)
         } else {
+            // macOS reports interruptions through session notifications;
+            // AVCaptureSession.isInterrupted is unavailable on this platform.
             publish(.failed("Camera preview could not start."))
         }
     }
