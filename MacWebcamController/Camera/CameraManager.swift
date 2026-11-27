@@ -6,6 +6,7 @@ import Observation
 @MainActor
 final class CameraManager {
     private(set) var cameras: [CameraInfo] = []
+    private(set) var authorizationStatus: AVAuthorizationStatus = .notDetermined
 
     private var discoverySession: AVCaptureDevice.DiscoverySession?
     private var refreshInProgress = false
@@ -21,6 +22,43 @@ final class CameraManager {
     // MARK: - Discovery
 
     func startDiscovery() {
+        let status = AVCaptureDevice.authorizationStatus(for: .video)
+        authorizationStatus = status
+
+        switch status {
+        case .authorized:
+            setupDiscoverySession()
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
+                Task { @MainActor in
+                    guard let self else { return }
+                    self.authorizationStatus = granted ? .authorized : .denied
+                    if granted {
+                        self.setupDiscoverySession()
+                    }
+                }
+            }
+        case .denied, .restricted:
+            break
+        @unknown default:
+            break
+        }
+    }
+
+    func checkPermissionState() {
+        let status = AVCaptureDevice.authorizationStatus(for: .video)
+        authorizationStatus = status
+        if status == .authorized && discoverySession == nil {
+            setupDiscoverySession()
+        }
+    }
+
+    private func setupDiscoverySession() {
+        guard discoverySession == nil else {
+            refreshCameras()
+            return
+        }
+
         let session = AVCaptureDevice.DiscoverySession(
             deviceTypes: [
                 .external,
@@ -70,15 +108,25 @@ final class CameraManager {
 
         Task.detached {
             let uvcDevices = UVCDeviceDiscovery.discoverDevices()
-            let infos = deviceNames.map { (uniqueID, localizedName, modelID) in
+            var infos = deviceNames.map { (uniqueID, localizedName, modelID) in
                 CameraManager.matchCameraFrom(
                     uniqueID: uniqueID, localizedName: localizedName, modelID: modelID,
                     uvcDevices: uvcDevices
                 )
             }
+            // Reject all collisions rather than arbitrarily assigning one physical
+            // control interface to several AVFoundation cameras.
+            let counts = infos.compactMap { $0.uvcDevice }.reduce(into: [ObjectIdentifier: Int]()) {
+                $0[ObjectIdentifier($1), default: 0] += 1
+            }
+            infos = infos.map { info in
+                guard let device = info.uvcDevice, counts[ObjectIdentifier(device)] != 1 else { return info }
+                return info.withUVCDevice(nil)
+            }
+            let refreshedCameras = infos
             await MainActor.run { [weak self] in
                 guard let self else { return }
-                self.cameras = infos
+                self.cameras = refreshedCameras
                 self.refreshInProgress = false
 
                 if self.refreshPending {
@@ -97,50 +145,14 @@ final class CameraManager {
         let locationID = extractLocationID(from: uniqueID)
         let (vendorID, productID) = extractVendorProduct(from: modelID)
 
-        print("[CameraManager] Matching '\(localizedName)' uniqueID=\(uniqueID) modelID=\(modelID)")
-        print("[CameraManager]   Extracted locationID=\(locationID.map { String(format: "0x%08X", $0) } ?? "nil") VID:0x\(String(vendorID, radix: 16)) PID:0x\(String(productID, radix: 16))")
-        print("[CameraManager]   Available UVC devices: \(uvcDevices.map { "\($0.name) loc:0x\(String($0.locationID, radix: 16)) vid:0x\(String($0.vendorID, radix: 16)) pid:0x\(String($0.productID, radix: 16))" })")
-
-        var uvcDevice: UVCDevice?
-
-        // 1. Try USB location ID matching (most precise).
-        // Note: always fall through to subsequent strategies if this yields 0 candidates —
-        // the uniqueID prefix may not encode the real location ID (e.g. UUID-format IDs).
-        if let locID = locationID {
-            let candidates = uvcDevices.filter { $0.locationID == locID }
-            if candidates.count == 1 {
-                uvcDevice = candidates.first
-                print("[CameraManager]   Matched by locationID (unique)")
-            } else if candidates.count > 1 {
-                // Multiple functions (e.g. IR + RGB) share the same USB location ID.
-                // Use name similarity to pick the right one; fall back to the first.
-                uvcDevice = candidates.first(where: { nameSimilar($0.name, localizedName) }) ?? candidates.first
-                print("[CameraManager]   Matched by locationID (\(candidates.count) candidates, name-tiebreak: \(uvcDevice?.name ?? "first"))")
-            } else {
-                print("[CameraManager]   locationID 0x\(String(locID, radix: 16)) matched 0 IOKit devices — falling through to VID/PID")
-            }
+        let candidates = uvcDevices.map {
+            CameraMatchCandidate(name: $0.name, locationID: $0.locationID,
+                                 vendorID: $0.vendorID, productID: $0.productID)
         }
-
-        // 2. Try VID/PID matching if location ID gave no result.
-        if uvcDevice == nil, vendorID != 0 || productID != 0 {
-            let candidates = uvcDevices.filter { $0.vendorID == vendorID && $0.productID == productID }
-            if candidates.count == 1 {
-                uvcDevice = candidates.first
-            } else if candidates.count > 1 {
-                uvcDevice = candidates.first(where: { nameSimilar($0.name, localizedName) }) ?? candidates.first
-            }
-            print("[CameraManager]   VID/PID match: \(candidates.count) candidate(s), using: \(uvcDevice != nil)")
-        }
-
-        // 3. Name similarity as last resort.
-        if uvcDevice == nil {
-            uvcDevice = uvcDevices.first(where: { nameSimilar($0.name, localizedName) })
-            print("[CameraManager]   Name match: \(uvcDevice != nil)")
-        }
-
-        if uvcDevice == nil {
-            print("[CameraManager]   WARNING: No UVC device matched for '\(localizedName)'")
-        }
+        let index = uniqueCandidateIndex(locationID: locationID, vendorID: vendorID,
+                                         productID: productID, name: localizedName,
+                                         candidates: candidates)
+        let uvcDevice = index.map { uvcDevices[$0] }
 
         return CameraInfo(
             id: uniqueID,
@@ -153,15 +165,42 @@ final class CameraManager {
         )
     }
 
+    /// An ambiguous match must never grant hardware write access.
+    nonisolated static func uniqueCandidateIndex(
+        locationID: UInt32?, vendorID: UInt16, productID: UInt16,
+        name: String, candidates: [CameraMatchCandidate]
+    ) -> Int? {
+        func resolve(_ indices: [Int]) -> Int? {
+            if indices.count == 1 { return indices.first }
+            let names = indices.filter { nameSimilar(candidates[$0].name, name) }
+            return names.count == 1 ? names.first : nil
+        }
+        if let locationID {
+            let matches = candidates.indices.filter { candidates[$0].locationID == locationID }
+            if !matches.isEmpty { return resolve(matches) }
+        }
+        if vendorID != 0 && productID != 0 {
+            let matches = candidates.indices.filter {
+                candidates[$0].vendorID == vendorID && candidates[$0].productID == productID
+            }
+            if !matches.isEmpty { return resolve(matches) }
+        }
+        let matches = candidates.indices.filter { nameSimilar(candidates[$0].name, name) }
+        return matches.count == 1 ? matches.first : nil
+    }
+
     /// Returns true when the two names refer to the same physical camera.
     /// Handles cases where IOKit and AVFoundation names differ slightly
     /// (e.g. "Dell Webcam WB7022" vs "Dell Webcam WB7022 - RGB").
     nonisolated static func nameSimilar(_ a: String, _ b: String) -> Bool {
-        let la = a.lowercased(), lb = b.lowercased()
+        let la = a.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let lb = b.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !la.isEmpty, !lb.isEmpty else { return false }
         return la == lb || la.contains(lb) || lb.contains(la)
     }
 
     nonisolated static func extractLocationID(from uniqueID: String) -> UInt32? {
+        guard UUID(uuidString: uniqueID) == nil else { return nil }
         let hex = uniqueID
             .replacingOccurrences(of: "0x", with: "", options: .caseInsensitive)
         let prefix = String(hex.prefix(8))
@@ -215,4 +254,11 @@ private final class NotificationObserverBox: @unchecked Sendable {
         if let obs = connected    { NotificationCenter.default.removeObserver(obs) }
         if let obs = disconnected { NotificationCenter.default.removeObserver(obs) }
     }
+}
+
+struct CameraMatchCandidate: Sendable {
+    let name: String
+    let locationID: UInt32
+    let vendorID: UInt16
+    let productID: UInt16
 }

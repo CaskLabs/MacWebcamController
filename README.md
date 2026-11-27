@@ -80,7 +80,7 @@ No additional configuration is needed — the app has the sandbox disabled to al
 - **Settings** — click the gear icon in the popover footer, the main window, or the menu bar icon's right-click menu to open the settings page (appearance, menu bar preview, launch at login)
 - **Presets** — in the Presets section, click + to save the current settings as a named preset; apply, update, or delete presets at any time
 
-Settings are restored automatically when the camera is selected again with the same AVFoundation device ID. If a selected camera is moved to another USB port while the app remains running, the app also attempts an in-session name-based migration. This fallback is not guaranteed across an app restart or when multiple cameras share the same name.
+Settings are restored automatically when the camera is selected again with the same AVFoundation device ID. Across USB ports, automatic migration requires a matching USB serial number, vendor/product IDs, and video-control interface. Camera names alone never trigger migration. Existing destination values and presets are preserved. Cameras without a serial number keep separate settings for each AVFoundation device ID.
 
 ---
 
@@ -88,7 +88,7 @@ Settings are restored automatically when the camera is selected again with the s
 
 ```
 MacWebcamController/
-├── MacWebcamControllerApp.swift   # App entry point, AppDelegate, status bar right-click menu, dock icon management
+├── MacWebcamControllerApp.swift   # App entry point, owned NSStatusItem/popover, windows, reconnect handling
 ├── UVC/
 │   ├── UVCConstants.swift         # UVC spec constants (request codes, descriptor types)
 │   ├── UVCControl.swift           # Enum of all UVC controls with selectors and data lengths
@@ -118,8 +118,23 @@ MacWebcamController/
 - Camera discovery: AVFoundation
 - UVC control: IOKit / IOUSBHost (direct USB control requests, no external libraries)
 - Persistence: UserDefaults (per camera, primarily matched by AVFoundation device ID)
-- Concurrency: Swift 6 strict concurrency, dedicated serial DispatchQueue for IOKit I/O
+- Concurrency: Swift 6 strict concurrency, dedicated serial queues for IOKit I/O and capture-session management
 - Tests: XCTest coverage for UVC descriptor parsing, value encoding, settings persistence, and parts of camera matching
+
+### Tests
+
+On an Apple Silicon Mac with Xcode 26 or later:
+
+```bash
+xcodebuild test -project MacWebcamController.xcodeproj \
+  -scheme MacWebcamController -destination 'platform=macOS,arch=arm64' \
+  CODE_SIGNING_ALLOWED=NO
+```
+
+The test target includes mock-camera regression tests for selection cancellation,
+restore failures and hardware readback, plus range, migration, matching, and native
+slider keyboard/accessibility checks. Live preview and real USB cameras still need
+manual verification on macOS.
 
 ---
 
@@ -165,7 +180,8 @@ Auto exposure, auto white balance and auto focus toggles are shown only when the
 
 - [ ] Improved release pipeline
 - [ ] Explicit permission, preview, USB-error, and no-UVC states
-- [ ] Stable physical-camera identity across USB ports and app restarts
+- [x] Serial-backed physical-camera identity across USB ports and app restarts
+- [ ] Explicit user-assisted reassociation for cameras without serial numbers
 - [ ] Complete reset semantics for manual and automatic controls
 - [ ] Hide all unsupported controls consistently
 - [ ] Broader `CameraViewModel`, hardware-mockup, UI, and accessibility test coverage

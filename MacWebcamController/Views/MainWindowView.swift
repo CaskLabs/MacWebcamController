@@ -37,10 +37,31 @@ struct MainWindowView: View {
 
                 Divider()
 
+                if let error = viewModel.errorMessage {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .padding(8)
+                        .frame(maxWidth: .infinity)
+                }
+
                 if viewModel.showingSettings {
                     SettingsView()
                         .frame(width: settingsWidth(for: geometry.size.width))
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if cameraManager.authorizationStatus == .denied || cameraManager.authorizationStatus == .restricted {
+                    ContentUnavailableView {
+                        Label("Camera Access Denied", systemImage: "camera.badge.ellipsis")
+                    } description: {
+                        Text("MacWebcamController needs camera access to preview video and detect connected cameras. Please grant Camera permission in System Settings.")
+                    } actions: {
+                        Button("Open System Settings") {
+                            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera") {
+                                NSWorkspace.shared.open(url)
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if viewModel.isLoading {
                     ProgressView("Loading camera controls…")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -59,6 +80,18 @@ struct MainWindowView: View {
 
                         ScrollView {
                             VStack(alignment: .leading, spacing: 12) {
+                                if !viewModel.hasSupportedControls &&
+                                    !viewModel.autoExposureSupported &&
+                                    !viewModel.whiteBalanceAutoSupported &&
+                                    !viewModel.focusAutoSupported {
+                                    Text("Image controls are unavailable for this camera.")
+                                        .foregroundStyle(.secondary)
+                                    if viewModel.selectedCamera?.uvcDevice != nil {
+                                        Button("Retry Loading Controls") {
+                                            viewModel.selectCamera(viewModel.selectedCamera)
+                                        }
+                                    }
+                                }
                                 ControlSection(title: "Image", controls: [
                                     .brightness, .contrast, .saturation, .sharpness, .gamma
                                 ])
@@ -158,10 +191,10 @@ private struct ControlSection: View {
     @Environment(CameraViewModel.self) private var viewModel
 
     var body: some View {
-        let visible = controls.filter { viewModel.controls[$0] != nil }
+        let visible = controls.filter { viewModel.controls[$0]?.isSupported == true }
         if !visible.isEmpty {
             CollapsibleSection(title: title) {
-                ForEach(controls) { control in
+                ForEach(visible) { control in
                     if let state = viewModel.controls[control] {
                         ControlSliderView(control: control, state: state) { value in
                             viewModel.setValue(value, for: control)
