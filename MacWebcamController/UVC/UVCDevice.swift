@@ -49,6 +49,8 @@ enum UVCDeviceError: Error, LocalizedError {
     case requestFailed(UVCRequest, UVCControl, Error)
     case rawRequestFailed(String, Error)
     case stall
+    case invalidResponseLength(expected: Int, actual: Int)
+    case invalidRange(UVCControl)
 
     var errorDescription: String? {
         switch self {
@@ -58,20 +60,64 @@ enum UVCDeviceError: Error, LocalizedError {
         case .requestFailed(_, let c, let e): "UVC request for \(c.displayName) failed: \(e.localizedDescription)"
         case .rawRequestFailed(let name, let e): "\(name) failed: \(e.localizedDescription)"
         case .stall:                       "Camera rejected the control request (STALL)."
+        case .invalidResponseLength(let expected, let actual):
+            "Incomplete USB response: expected \(expected) bytes, received \(actual)."
+        case .invalidRange(let control):
+            "Invalid range reported for \(control.displayName)."
         }
     }
 }
 
 // MARK: - UVC Device
 
+/// Hardware boundary used by the view model and deterministic test devices.
+protocol CameraControlling: AnyObject, Sendable {
+    var identity: String { get }
+    var persistentIdentity: String? { get }
+    var processingUnitID: UInt8 { get }
+    var cameraTerminalID: UInt8 { get }
+    var supportedPUControls: UInt32 { get }
+    var supportedCTControls: UInt32 { get }
+    var isAutoExposureSupported: Bool { get }
+    var isWhiteBalanceAutoSupported: Bool { get }
+    var isFocusAutoSupported: Bool { get }
+    func isSupported(_ control: UVCControl) -> Bool
+    func getRange(for control: UVCControl) throws -> UVCControlRange
+    func getValue(for control: UVCControl, request: UVCRequest) throws -> Int
+    func setValue(_ value: Int, for control: UVCControl) throws
+    func getAutoExposureMode() throws -> Int
+    func getWhiteBalanceAuto() throws -> Bool
+    func getFocusAuto() throws -> Bool
+    func setAutoExposure(enabled: Bool) throws
+    func setWhiteBalanceAuto(_ enabled: Bool) throws
+    func setFocusAuto(_ enabled: Bool) throws
+}
+
+extension CameraControlling {
+    func getValue(for control: UVCControl) throws -> Int {
+        try getValue(for: control, request: .getCurrent)
+    }
+}
+
 /// Communicates with a UVC camera over USB using IOUSBHostDevice.
 /// Sends UVC class-specific control requests on ep0 (the device's default control endpoint),
 /// without claiming any specific interface — matching the approach used by CameraController.
-final class UVCDevice: @unchecked Sendable {
+final class UVCDevice: CameraControlling, @unchecked Sendable {
     let name: String
     let locationID: UInt32
     let vendorID: UInt16
     let productID: UInt16
+    let serialNumber: String?
+
+    /// Port-independent identity only when the camera supplies a serial number.
+    var persistentIdentity: String? {
+        guard let serialNumber, !serialNumber.isEmpty else { return nil }
+        return "\(vendorID):\(productID):\(serialNumber):\(vcInterfaceNumber)"
+    }
+
+    var identity: String {
+        "\(serialNumber ?? ""):\(vendorID):\(productID):\(locationID):\(vcInterfaceNumber):\(processingUnitID):\(cameraTerminalID):\(supportedPUControls):\(supportedCTControls)"
+    }
 
     private let hostDevice: IOUSBHostDevice
     let vcInterfaceNumber: UInt8
@@ -82,13 +128,14 @@ final class UVCDevice: @unchecked Sendable {
     private(set) var supportedCTControls: UInt32 = 0
 
     init(hostDevice: IOUSBHostDevice, vcInterfaceNumber: UInt8, name: String,
-         locationID: UInt32, vendorID: UInt16, productID: UInt16) {
+         locationID: UInt32, vendorID: UInt16, productID: UInt16, serialNumber: String? = nil) {
         self.hostDevice = hostDevice
         self.vcInterfaceNumber = vcInterfaceNumber
         self.name = name
         self.locationID = locationID
         self.vendorID = vendorID
         self.productID = productID
+        self.serialNumber = serialNumber?.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     deinit {
@@ -167,6 +214,9 @@ final class UVCDevice: @unchecked Sendable {
 
         var bytesTransferred: UInt = 0
         try hostDevice.__send(req, data: data, bytesTransferred: &bytesTransferred, completionTimeout: 5.0)
+        if bmRequestType & 0x80 != 0, bytesTransferred != UInt(data.length) {
+            throw UVCDeviceError.invalidResponseLength(expected: data.length, actual: Int(bytesTransferred))
+        }
     }
 
     private func sendRequest(_ request: UVCRequest, control: UVCControl, dataLength: Int? = nil) throws -> Data {
@@ -211,12 +261,9 @@ final class UVCDevice: @unchecked Sendable {
     }
 
     func getRange(for control: UVCControl) throws -> UVCControlRange {
-        let minimum      = try getValue(for: control, request: .getMinimum)
-        let maximum      = try getValue(for: control, request: .getMaximum)
-        let resolution   = try getValue(for: control, request: .getResolution)
-        let defaultValue = try getValue(for: control, request: .getDefault)
-        return UVCControlRange(minimum: minimum, maximum: maximum,
-                               resolution: resolution, defaultValue: defaultValue)
+        try UVCControlRange.read(for: control) { request in
+            try getValue(for: control, request: request)
+        }
     }
 
     func getInfo(for control: UVCControl) throws -> UVCInfoCapabilities {
@@ -238,20 +285,71 @@ final class UVCDevice: @unchecked Sendable {
         } catch {
             throw UVCDeviceError.rawRequestFailed("GET_CUR Auto Exposure Mode", error)
         }
-        return Int((data.bytes.bindMemory(to: UInt8.self, capacity: 1).pointee))
+        var byte: UInt8 = 0
+        data.getBytes(&byte, length: 1)
+        return Int(byte)
     }
 
     func setAutoExposureMode(_ mode: Int) throws {
         let wValue = UInt16(0x02) << 8
         let wIndex = (UInt16(cameraTerminalID) << 8) | UInt16(vcInterfaceNumber)
-        let data = NSMutableData(length: 1) ?? NSMutableData()
-        data.mutableBytes.initializeMemory(as: UInt8.self, repeating: UInt8(mode & 0xFF), count: 1)
+        var byte = UInt8(mode & 0xFF)
+        let data = NSMutableData(bytes: &byte, length: 1)
         do {
             try sendRaw(bmRequestType: UVCRequest.setCurrent.bmRequestType,
                         bRequest: UVCRequest.setCurrent.rawValue,
                         wValue: wValue, wIndex: wIndex, data: data)
         } catch {
             throw UVCDeviceError.rawRequestFailed("SET_CUR Auto Exposure Mode", error)
+        }
+    }
+
+    /// Queries the bitmask of supported Auto-Exposure modes via GET_RES on CT selector 0x02.
+    /// Bit 0: Manual (1), Bit 1: Auto (2), Bit 2: Shutter Priority (4), Bit 3: Aperture Priority (8).
+    func getAutoExposureSupportedModes() -> UInt8 {
+        let wValue = UInt16(0x02) << 8
+        let wIndex = (UInt16(cameraTerminalID) << 8) | UInt16(vcInterfaceNumber)
+        let data = NSMutableData(length: 1) ?? NSMutableData()
+        do {
+            try sendRaw(bmRequestType: UVCRequest.getResolution.bmRequestType,
+                        bRequest: UVCRequest.getResolution.rawValue,
+                        wValue: wValue, wIndex: wIndex, data: data)
+            var byte: UInt8 = 0
+            data.getBytes(&byte, length: 1)
+            return byte
+        } catch {
+            return 0
+        }
+    }
+
+    /// Sets Auto Exposure on or off using the best supported mode.
+    /// When enabling: prefers Full Auto (2), then Aperture Priority (8), then Shutter Priority (4).
+    /// When disabling: sets Manual mode (1).
+    func setAutoExposure(enabled: Bool) throws {
+        if !enabled {
+            try setAutoExposureMode(1)
+            return
+        }
+
+        let supportedModes = getAutoExposureSupportedModes()
+        if supportedModes != 0 {
+            if (supportedModes & 2) != 0 {
+                try setAutoExposureMode(2)
+                return
+            } else if (supportedModes & 8) != 0 {
+                try setAutoExposureMode(8)
+                return
+            } else if (supportedModes & 4) != 0 {
+                try setAutoExposureMode(4)
+                return
+            }
+        }
+
+        // Fallback if GET_RES returned 0 or wasn't supported: try Auto (2), then Aperture Priority (8)
+        do {
+            try setAutoExposureMode(2)
+        } catch {
+            try setAutoExposureMode(8)
         }
     }
 
@@ -268,14 +366,16 @@ final class UVCDevice: @unchecked Sendable {
         } catch {
             throw UVCDeviceError.rawRequestFailed("GET_CUR Focus Auto", error)
         }
-        return data.bytes.bindMemory(to: UInt8.self, capacity: 1).pointee != 0
+        var byte: UInt8 = 0
+        data.getBytes(&byte, length: 1)
+        return byte != 0
     }
 
     func setFocusAuto(_ enabled: Bool) throws {
         let wValue = UInt16(0x08) << 8
         let wIndex = (UInt16(cameraTerminalID) << 8) | UInt16(vcInterfaceNumber)
-        let data = NSMutableData(length: 1) ?? NSMutableData()
-        data.mutableBytes.initializeMemory(as: UInt8.self, repeating: enabled ? 1 : 0, count: 1)
+        var byte: UInt8 = enabled ? 1 : 0
+        let data = NSMutableData(bytes: &byte, length: 1)
         do {
             try sendRaw(bmRequestType: UVCRequest.setCurrent.bmRequestType,
                         bRequest: UVCRequest.setCurrent.rawValue,
@@ -298,14 +398,16 @@ final class UVCDevice: @unchecked Sendable {
         } catch {
             throw UVCDeviceError.rawRequestFailed("GET_CUR WB Auto", error)
         }
-        return data.bytes.bindMemory(to: UInt8.self, capacity: 1).pointee != 0
+        var byte: UInt8 = 0
+        data.getBytes(&byte, length: 1)
+        return byte != 0
     }
 
     func setWhiteBalanceAuto(_ enabled: Bool) throws {
         let wValue = UInt16(0x0B) << 8
         let wIndex = (UInt16(processingUnitID) << 8) | UInt16(vcInterfaceNumber)
-        let data = NSMutableData(length: 1) ?? NSMutableData()
-        data.mutableBytes.initializeMemory(as: UInt8.self, repeating: enabled ? 1 : 0, count: 1)
+        var byte: UInt8 = enabled ? 1 : 0
+        let data = NSMutableData(bytes: &byte, length: 1)
         do {
             try sendRaw(bmRequestType: UVCRequest.setCurrent.bmRequestType,
                         bRequest: UVCRequest.setCurrent.rawValue,

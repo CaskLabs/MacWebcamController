@@ -100,4 +100,52 @@ final class SettingsPersistenceTests: XCTestCase {
             autoExposure: true, autoWhiteBalance: true, autoFocus: true
         ))
     }
+
+    func testSavesAndLoadsLastSelectedCamera() {
+        let initial = persistence.loadLastSelectedCamera()
+        XCTAssertNil(initial.id)
+        XCTAssertNil(initial.name)
+
+        persistence.saveLastSelectedCamera(id: "camera-xyz", name: "Logitech Brio")
+        let loaded = persistence.loadLastSelectedCamera()
+        XCTAssertEqual(loaded.id, "camera-xyz")
+        XCTAssertEqual(loaded.name, "Logitech Brio")
+    }
+    func testMigrationPreservesTargetValuesAndMergesPresetsIdempotently() {
+        let source = CameraPreset(name: "Source", values: ["brightness": 2])
+        var target = source
+        target.name = "Edited on target"
+        let extra = CameraPreset(name: "Extra", values: [:])
+        persistence.save(value: 12, for: .brightness, cameraID: "old")
+        persistence.save(value: 99, for: .brightness, cameraID: "new")
+        persistence.save(value: 42, for: .contrast, cameraID: "old")
+        persistence.savePresets([source, extra], cameraID: "old")
+        persistence.savePresets([target], cameraID: "new")
+
+        persistence.migrateCameraData(from: "old", to: "new")
+        persistence.migrateCameraData(from: "old", to: "new")
+
+        XCTAssertEqual(persistence.load(for: .brightness, cameraID: "new"), 99)
+        XCTAssertEqual(persistence.load(for: .contrast, cameraID: "new"), 42)
+        let presets = persistence.loadPresets(cameraID: "new")
+        XCTAssertEqual(presets.count, 2)
+        XCTAssertEqual(presets.first?.name, "Edited on target")
+        XCTAssertEqual(presets.last?.id, extra.id)
+    }
+
+    func testMigrationDoesNotReplaceCorruptTargetPresets() {
+        let invalid = Data("invalid-json".utf8)
+        defaults.set(invalid, forKey: "presets.new")
+        persistence.savePresets([CameraPreset(name: "Source", values: [:])], cameraID: "old")
+        persistence.migrateCameraData(from: "old", to: "new")
+        XCTAssertEqual(defaults.data(forKey: "presets.new"), invalid)
+    }
+
+    func testLastPhysicalIdentityIsClearedForCamerasWithoutSerialNumber() {
+        persistence.saveLastSelectedCamera(id: "a", name: "Webcam", physicalID: "serial-a")
+        XCTAssertEqual(persistence.loadLastSelectedCamera().physicalID, "serial-a")
+        persistence.saveLastSelectedCamera(id: "b", name: "Webcam")
+        XCTAssertNil(persistence.loadLastSelectedCamera().physicalID)
+    }
+
 }

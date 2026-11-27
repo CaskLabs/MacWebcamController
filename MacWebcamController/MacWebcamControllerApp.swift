@@ -1,182 +1,161 @@
+import AppKit
 import SwiftUI
+import Observation
 
+/// Owns the public AppKit status item; SwiftUI owns the content of both surfaces.
 @MainActor
-private class AppDelegate: NSObject, NSApplicationDelegate {
-    /// Set by the SwiftUI App to open a window by ID.
-    var openWindowHandler: ((String) -> Void)?
-    var openSettingsHandler: (() -> Void)?
-
-    private weak var statusBarButton: NSStatusBarButton?
-    private var originalTarget: AnyObject?
-    private var originalAction: Selector?
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    private let cameraManager = CameraManager()
+    private let viewModel = CameraViewModel()
+    private let previewController = CameraPreviewController()
+    private var statusItem: NSStatusItem?
+    private let popover = NSPopover()
+    private var mainWindow: NSWindow?
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         let raw = UserDefaults.standard.string(forKey: "appearanceMode") ?? ""
-        let mode = AppearanceMode(rawValue: raw) ?? .system
-        mode.apply()
+        (AppearanceMode(rawValue: raw) ?? .system).apply()
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NotificationCenter.default.addObserver(
-            self, selector: #selector(windowCountChanged),
-            name: NSWindow.didBecomeKeyNotification, object: nil)
-        NotificationCenter.default.addObserver(
-            self, selector: #selector(windowCountChanged),
-            name: NSWindow.willCloseNotification, object: nil)
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        statusItem = item
+        if let button = item.button {
+            button.image = NSImage(systemSymbolName: "camera", accessibilityDescription: "Camera Controls")
+            button.target = self
+            button.action = #selector(statusItemClicked(_:))
+            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        }
+        popover.behavior = .transient
+        popover.contentViewController = NSHostingController(rootView:
+            MenuBarView(
+                openFullControls: { [weak self] in self?.showMainWindow(settings: false) },
+                openSettings: { [weak self] in self?.showMainWindow(settings: true) }
+            )
+            .environment(cameraManager)
+            .environment(viewModel)
+            .environment(previewController)
+        )
+        NotificationCenter.default.addObserver(self, selector: #selector(windowClosed(_:)),
+                                               name: NSWindow.willCloseNotification, object: nil)
+        observeCameras()
+    }
 
-        // Wait for SwiftUI to create the MenuBarExtra status item, then hook right-click.
-        Task {
-            try? await Task.sleep(nanoseconds: 500_000_000)
-            setupStatusBarRightClick()
+    private func observeCameras() {
+        let cameras = withObservationTracking {
+            cameraManager.cameras
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in self?.observeCameras() }
+        }
+        handleCameraListChange(cameras)
+    }
+
+    func applicationDidBecomeActive(_ notification: Notification) {
+        cameraManager.checkPermissionState()
+    }
+
+    @objc private func statusItemClicked(_ sender: NSStatusBarButton) {
+        cameraManager.checkPermissionState()
+        if NSApp.currentEvent?.type == .rightMouseUp {
+            popover.performClose(nil)
+            let menu = NSMenu()
+            let controls = menu.addItem(withTitle: "Open Full Controls", action: #selector(openFullControls), keyEquivalent: "o")
+            controls.target = self
+            let settings = menu.addItem(withTitle: "Settings", action: #selector(openSettings), keyEquivalent: ",")
+            settings.target = self
+            menu.addItem(.separator())
+            menu.addItem(withTitle: "Quit MacWebcamController", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+            menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.maxY + 2), in: sender)
+        } else if popover.isShown {
+            popover.performClose(nil)
+        } else {
+            popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .minY)
         }
     }
 
-    private func setupStatusBarRightClick() {
-        guard let button = findStatusBarButton() else {
-            print("[AppDelegate] Status bar button not found — right-click menu unavailable")
+    @objc private func openFullControls() { showMainWindow(settings: false) }
+    @objc fileprivate func openSettings() { showMainWindow(settings: true) }
+
+    private func showMainWindow(settings: Bool) {
+        popover.performClose(nil)
+        viewModel.showingSettings = settings
+        cameraManager.checkPermissionState()
+        if mainWindow == nil {
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 420, height: 600),
+                                  styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                                  backing: .buffered, defer: false)
+            window.title = "Camera Controls"
+            window.isReleasedWhenClosed = false
+            window.contentMinSize = NSSize(width: 400, height: 500)
+            window.contentViewController = NSHostingController(rootView:
+                MainWindowView()
+                    .environment(cameraManager)
+                    .environment(viewModel)
+                    .environment(previewController)
+            )
+            window.center()
+            mainWindow = window
+        }
+        NSApp.setActivationPolicy(.regular)
+        mainWindow?.deminiaturize(nil)
+        mainWindow?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    @objc private func windowClosed(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow, window === mainWindow else { return }
+        NSApp.setActivationPolicy(.accessory)
+    }
+
+    private func handleCameraListChange(_ cameras: [CameraInfo]) {
+        if let selected = viewModel.selectedCamera {
+            if let refreshed = cameras.first(where: { $0.id == selected.id }) {
+                if refreshed != selected { viewModel.selectCamera(refreshed) }
+                return
+            }
+            viewModel.selectCamera(nil)
+            viewModel.errorMessage = "Camera \"\(selected.name)\" was disconnected."
+        }
+
+        // Only a serial-backed identity can authorize migration across ports.
+        let physicalMatches = cameras.filter {
+            guard let identity = viewModel.lastSelectedPhysicalCameraID else { return false }
+            return $0.uvcDevice?.persistentIdentity == identity
+        }
+        if physicalMatches.count > 1 {
+            viewModel.errorMessage = "Multiple cameras report the same serial identity. Select a camera explicitly."
             return
         }
-        statusBarButton = button
-        originalTarget = button.target as AnyObject?
-        originalAction = button.action
-        let mask: NSEvent.EventTypeMask = [.leftMouseUp, .rightMouseUp]
-        button.sendAction(on: mask)
-        button.target = self
-        button.action = #selector(statusBarButtonClicked(_:))
-    }
-
-    /// Scans NSApp.windows for the status-bar-level window and returns its NSStatusBarButton.
-    private func findStatusBarButton() -> NSStatusBarButton? {
-        for window in NSApp.windows where window.level == .statusBar {
-            if let button = firstSubview(ofType: NSStatusBarButton.self, in: window.contentView) {
-                return button
+        if let sameCamera = physicalMatches.first {
+            if let oldCameraID = viewModel.lastSelectedCameraID {
+                SettingsPersistence().migrateCameraData(from: oldCameraID, to: sameCamera.id)
             }
-        }
-        return nil
-    }
-
-    private func firstSubview<T: NSView>(ofType type: T.Type, in view: NSView?) -> T? {
-        guard let view else { return nil }
-        if let match = view as? T { return match }
-        for sub in view.subviews {
-            if let match = firstSubview(ofType: type, in: sub) { return match }
-        }
-        return nil
-    }
-
-    @objc private func statusBarButtonClicked(_ sender: NSStatusBarButton) {
-        guard let event = NSApp.currentEvent else { return }
-        if event.type == .rightMouseUp {
-            showContextMenu(for: sender)
-        } else if let action = originalAction {
-            NSApp.sendAction(action, to: originalTarget, from: sender)
+            viewModel.selectCamera(sameCamera)
+        } else if let sameCamera = cameras.first(where: { $0.id == viewModel.lastSelectedCameraID }),
+                  viewModel.lastSelectedPhysicalCameraID == nil ||
+                    sameCamera.uvcDevice?.persistentIdentity == viewModel.lastSelectedPhysicalCameraID {
+            viewModel.selectCamera(sameCamera)
+        } else if cameras.count == 1 {
+            viewModel.selectCamera(cameras.first)
+        } else if cameras.filter({ $0.uvcDevice != nil }).count == 1,
+                  let singleUVC = cameras.first(where: { $0.uvcDevice != nil }) {
+            viewModel.selectCamera(singleUVC)
         }
     }
 
-    private func showContextMenu(for button: NSStatusBarButton) {
-        let menu = NSMenu()
-
-        let openItem = NSMenuItem(title: "Open Full Controls", action: #selector(openFullControls), keyEquivalent: "")
-        openItem.target = self
-        openItem.image = NSImage(systemSymbolName: "slider.horizontal.3", accessibilityDescription: nil)
-        menu.addItem(openItem)
-
-        let settingsItem = NSMenuItem(title: "Settings", action: #selector(openSettings), keyEquivalent: "")
-        settingsItem.target = self
-        menu.addItem(settingsItem)
-
-        menu.addItem(.separator())
-
-        let quitItem = NSMenuItem(title: "Quit MacWebcamController", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
-        menu.addItem(quitItem)
-
-        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.maxY + 2), in: button)
-    }
-
-    @objc private func openFullControls() {
-        openWindowHandler?("main")
-    }
-
-    @objc private func openSettings() {
-        openSettingsHandler?()
-    }
-
-    @objc private func windowCountChanged(_ notification: Notification) {
-        // Defer one run-loop cycle so SwiftUI can update the window list after a close.
-        DispatchQueue.main.async {
-            let hasWindow = NSApp.windows.contains {
-                $0.isVisible && $0.styleMask.contains(.titled)
-            }
-            NSApp.setActivationPolicy(hasWindow ? .regular : .accessory)
-        }
-    }
 }
 
 @main
 struct MacWebcamControllerApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @Environment(\.openWindow) private var openWindow
-    @State private var cameraManager = CameraManager()
-    @State private var viewModel = CameraViewModel()
-    @State private var previewController = CameraPreviewController()
 
     var body: some Scene {
-        MenuBarExtra("MacWebcamController", systemImage: "camera") {
-            MenuBarView()
-                .environment(cameraManager)
-                .environment(viewModel)
-                .environment(previewController)
-                .onChange(of: cameraManager.cameras) { _, cameras in
-                    handleCameraListChange(cameras)
+        Settings { SettingsView().frame(width: 420, height: 260) }
+            .commands {
+                CommandGroup(replacing: .appSettings) {
+                    Button("Settings…") { appDelegate.openSettings() }
+                        .keyboardShortcut(",", modifiers: .command)
                 }
-                .onAppear {
-                    appDelegate.openWindowHandler = { id in
-                        openWindow(id: id)
-                        NSApp.activate(ignoringOtherApps: true)
-                    }
-                    appDelegate.openSettingsHandler = {
-                        viewModel.showingSettings = true
-                        openWindow(id: "main")
-                        NSApp.activate(ignoringOtherApps: true)
-                    }
-                }
-        }
-        .menuBarExtraStyle(.window)
-
-        Window("Camera Controls", id: "main") {
-            MainWindowView()
-                .environment(cameraManager)
-                .environment(viewModel)
-                .environment(previewController)
-                .onChange(of: cameraManager.cameras) { _, cameras in
-                    handleCameraListChange(cameras)
-                }
-        }
-        .defaultSize(width: 420, height: 600)
-    }
-
-    @MainActor
-    private func handleCameraListChange(_ cameras: [CameraInfo]) {
-        if let selected = viewModel.selectedCamera {
-            // Camera was removed from the list — deselect and notify.
-            if !cameras.contains(where: { $0.id == selected.id }) {
-                viewModel.selectCamera(nil)
-                viewModel.errorMessage = "Camera \"\(selected.name)\" was disconnected."
             }
-        } else {
-            // Camera was not selected — check if a previously selected camera reappeared.
-            // Try ID first (same port), then name (different port — uniqueID changes with location).
-            if let sameCamera = cameras.first(where: { $0.id == viewModel.lastSelectedCameraID }) {
-                viewModel.selectCamera(sameCamera)
-            } else if let sameNameCamera = cameras.first(where: { $0.name == viewModel.lastSelectedCameraName }) {
-                if let oldCameraID = viewModel.lastSelectedCameraID {
-                    SettingsPersistence().migrateCameraData(
-                        from: oldCameraID,
-                        to: sameNameCamera.id
-                    )
-                }
-                viewModel.selectCamera(sameNameCamera)
-            }
-        }
     }
 }

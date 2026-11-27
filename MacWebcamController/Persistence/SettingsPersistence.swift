@@ -27,7 +27,8 @@ struct CameraPreset: Codable, Identifiable {
 
 /// Saves and restores per-camera UVC control values using UserDefaults.
 /// Key format: "camera.<uniqueID>.<control.rawValue>"
-struct SettingsPersistence {
+// UserDefaults supports concurrent access; this value exposes no mutable state.
+struct SettingsPersistence: @unchecked Sendable {
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard) {
@@ -72,21 +73,30 @@ struct SettingsPersistence {
 
     /// Copies persisted values and presets when the same camera reconnects with a
     /// different AVFoundation ID, for example after moving it to another USB port.
-    /// The source data is retained so reconnecting on the original port also works.
+    /// The caller must establish physical identity first. Existing target values
+    /// and preset IDs win; source data remains available on the original port.
     func migrateCameraData(from oldCameraID: String, to newCameraID: String) {
         guard !oldCameraID.isEmpty,
               !newCameraID.isEmpty,
               oldCameraID != newCameraID else { return }
 
         for control in UVCControl.allCases {
-            guard let value = load(for: control, cameraID: oldCameraID) else { continue }
+            guard load(for: control, cameraID: newCameraID) == nil,
+                  let value = load(for: control, cameraID: oldCameraID) else { continue }
             save(value: value, for: control, cameraID: newCameraID)
         }
 
         let oldPresets = loadPresets(cameraID: oldCameraID)
-        if !oldPresets.isEmpty {
-            savePresets(oldPresets, cameraID: newCameraID)
+        guard !oldPresets.isEmpty else { return }
+        // Never replace unreadable target data with a partial migration.
+        if let existing = defaults.object(forKey: presetsKey(for: newCameraID)) {
+            guard let data = existing as? Data,
+                  (try? JSONDecoder().decode([CameraPreset].self, from: data)) != nil else { return }
         }
+        let targetPresets = loadPresets(cameraID: newCameraID)
+        let existingIDs = Set(targetPresets.map(\.id))
+        savePresets(targetPresets + oldPresets.filter { !existingIDs.contains($0.id) },
+                    cameraID: newCameraID)
     }
 
     // MARK: - Named Presets
@@ -103,5 +113,22 @@ struct SettingsPersistence {
     func savePresets(_ presets: [CameraPreset], cameraID: String) {
         guard let data = try? JSONEncoder().encode(presets) else { return }
         defaults.set(data, forKey: presetsKey(for: cameraID))
+    }
+
+    // MARK: - Last Selected Camera
+
+    private let lastSelectedCameraIDKey = "lastSelectedCameraID"
+    private let lastSelectedCameraNameKey = "lastSelectedCameraName"
+
+    func saveLastSelectedCamera(id: String, name: String, physicalID: String? = nil) {
+        defaults.set(id, forKey: lastSelectedCameraIDKey)
+        defaults.set(name, forKey: lastSelectedCameraNameKey)
+        defaults.set(physicalID, forKey: "lastSelectedPhysicalCameraID")
+    }
+
+    func loadLastSelectedCamera() -> (id: String?, name: String?, physicalID: String?) {
+        let id = defaults.string(forKey: lastSelectedCameraIDKey)
+        let name = defaults.string(forKey: lastSelectedCameraNameKey)
+        return (id, name, defaults.string(forKey: "lastSelectedPhysicalCameraID"))
     }
 }

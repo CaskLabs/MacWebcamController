@@ -28,4 +28,29 @@ final class CameraMatchingTests: XCTestCase {
         XCTAssertTrue(CameraManager.nameSimilar("Dell Webcam WB7022 - RGB", "Dell Webcam WB7022"))
         XCTAssertFalse(CameraManager.nameSimilar("FaceTime Camera", "Dell Webcam WB7022"))
     }
+    func testIdenticalModelsAreAmbiguousWithoutLocation() {
+        let cameras = [
+            CameraMatchCandidate(name: "Webcam", locationID: 1, vendorID: 10, productID: 20),
+            CameraMatchCandidate(name: "Webcam", locationID: 2, vendorID: 10, productID: 20)
+        ]
+        XCTAssertNil(CameraManager.uniqueCandidateIndex(locationID: nil, vendorID: 10,
+                                                        productID: 20, name: "Webcam", candidates: cameras))
+        XCTAssertEqual(CameraManager.uniqueCandidateIndex(locationID: 2, vendorID: 10,
+                                                          productID: 20, name: "Webcam", candidates: cameras), 1)
+    }
+
+    func testAmbiguousFunctionsAtSameLocationAreNotAssignedArbitrarily() {
+        let cameras = [
+            CameraMatchCandidate(name: "Webcam", locationID: 1, vendorID: 10, productID: 20),
+            CameraMatchCandidate(name: "Webcam", locationID: 1, vendorID: 10, productID: 20)
+        ]
+        XCTAssertNil(CameraManager.uniqueCandidateIndex(locationID: 1, vendorID: 10,
+                                                        productID: 20, name: "Webcam", candidates: cameras))
+    }
+
+    func testUUIDPrefixIsNotInterpretedAsUSBLocation() {
+        XCTAssertNil(CameraManager.extractLocationID(from: "12345678-1234-1234-1234-123456789abc"))
+        XCTAssertFalse(CameraManager.nameSimilar("", "Webcam"))
+    }
+
 }

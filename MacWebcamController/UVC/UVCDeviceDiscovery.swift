@@ -113,7 +113,8 @@ enum UVCDeviceDiscovery {
             name: name,
             locationID: locationID,
             vendorID: vendorID,
-            productID: productID
+            productID: productID,
+            serialNumber: registryString(deviceService, key: "USB Serial Number")
         )
 
         if let data = configData {

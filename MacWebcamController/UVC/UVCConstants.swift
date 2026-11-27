@@ -80,4 +80,29 @@ struct UVCControlRange: Sendable {
     let maximum: Int
     let resolution: Int
     let defaultValue: Int
+
+    static func read(for control: UVCControl, value: (UVCRequest) throws -> Int) throws -> UVCControlRange {
+        let minimum = try value(.getMinimum)
+        let maximum = try value(.getMaximum)
+        guard maximum > minimum else { throw UVCDeviceError.invalidRange(control) }
+        // Optional metadata must not hide an otherwise usable control.
+        let resolution = max(1, (try? value(.getResolution)) ?? 1)
+        let defaultValue = (try? value(.getDefault)) ?? (try? value(.getCurrent)) ?? minimum
+        let range = UVCControlRange(minimum: minimum, maximum: maximum,
+                                    resolution: resolution, defaultValue: defaultValue)
+        return UVCControlRange(minimum: minimum, maximum: maximum,
+                               resolution: resolution, defaultValue: range.normalized(defaultValue))
+    }
+
+    /// UVC values are at most 32 bits, so the bounded offset fits in Int on macOS.
+    func normalized(_ value: Int) -> Int {
+        guard maximum >= minimum else { return minimum }
+        let step = max(1, resolution)
+        let bounded = max(minimum, min(maximum, value))
+        let offset = bounded - minimum
+        let lower = offset / step
+        let steps = offset % step >= (step + 1) / 2 ? lower + 1 : lower
+        let highestStep = (maximum - minimum) / step
+        return minimum + min(steps, highestStep) * step
+    }
 }

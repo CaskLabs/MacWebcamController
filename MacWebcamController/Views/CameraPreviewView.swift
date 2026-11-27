@@ -1,46 +1,85 @@
-@preconcurrency import AVFoundation
-import Observation
 import SwiftUI
+import AVFoundation
+import AppKit
 
-/// Owns the single capture session shared by every preview surface.
-///
-/// MenuBarExtra content can be dismantled and recreated frequently. Keeping the
-/// session here prevents overlapping `startRunning`/`stopRunning` calls from
-/// short-lived NSViews and allows the main-window and menu-bar layers to share
-/// one camera stream.
+// MARK: - Shared Preview Controller
+
+/// Owns a single `AVCaptureSession` and coordinates sharing it among multiple
+/// preview consumers (for example, the main window and a menu popover).
 @Observable
-final class CameraPreviewController: @unchecked Sendable {
-    @ObservationIgnored let session = AVCaptureSession()
-
-    @ObservationIgnored private let sessionQueue = DispatchQueue(
-        label: "com.macwebcamcontroller.preview.session",
-        qos: .userInitiated
-    )
-    @ObservationIgnored private let stateLock = NSLock()
-    @ObservationIgnored private var consumers: [UUID: String] = [:]
-    @ObservationIgnored private var pendingStop: DispatchWorkItem?
-    @ObservationIgnored private var configuredDeviceID: String?
-    @ObservationIgnored private var observedDevice: AVCaptureDevice?
-    @ObservationIgnored private var deviceUsageObservation: NSKeyValueObservation?
-    @ObservationIgnored private let observerBox = PreviewNotificationObserverBox()
+@MainActor
+final class CameraPreviewController {
+    private let engine: CameraPreviewEngine
+    private(set) var state: CameraPreviewState = .idle
+    var session: AVCaptureSession { engine.session }
 
     init() {
-        session.beginConfiguration()
-        if session.canSetSessionPreset(.medium) {
-            // The menu-bar preview is small. Avoid running a 4K/4MP camera and
-            // the macOS video-effects pipeline at full resolution for it.
-            session.sessionPreset = .medium
+        engine = CameraPreviewEngine()
+        engine.setStateHandler { [weak self] state in
+            DispatchQueue.main.async { [weak self] in self?.state = state }
         }
-        session.commitConfiguration()
+    }
 
-        observerBox.interruptionEnded = NotificationCenter.default.addObserver(
-            forName: AVCaptureSession.interruptionEndedNotification,
-            object: session,
-            queue: nil
-        ) { [weak self] _ in
-            self?.restartAfterInterruption()
+    func retry() { engine.retry() }
+
+    func attach(_ consumerID: UUID, cameraID: String) {
+        engine.attach(consumerID, cameraID: cameraID)
+    }
+
+    func detach(_ consumerID: UUID, immediately: Bool = false) {
+        engine.detach(consumerID, immediately: immediately)
+    }
+}
+
+enum CameraPreviewState: Equatable, Sendable {
+    case idle, starting, running, busy, interrupted, denied
+    case failed(String)
+
+    var message: String? {
+        switch self {
+        case .idle: "Preview is inactive."
+        case .starting: "Starting camera preview…"
+        case .running: nil
+        case .busy: "Camera is in use by another application. Preview will resume when it is available."
+        case .interrupted: "Camera preview was interrupted."
+        case .denied: "Camera access is not authorized. Allow access in System Settings."
+        case .failed(let message): message
         }
+    }
+}
 
+/// All mutable capture state and session operations are confined to sessionQueue.
+/// Only the immutable session reference is shared with main-thread preview layers.
+private final class CameraPreviewEngine: @unchecked Sendable {
+    let session = AVCaptureSession()
+    private let sessionQueue = DispatchQueue(label: "com.macwebcamcontroller.preview")
+    private var configuredDeviceID: String?
+    private var consumers: [UUID: String] = [:]
+    private var pendingStop: DispatchWorkItem?
+    private var observedDevice: AVCaptureDevice?
+    private var deviceUsageObservation: NSKeyValueObservation?
+    private let observerBox = PreviewObserverBox()
+    private var stateHandler: (@Sendable (CameraPreviewState) -> Void)?
+
+    func setStateHandler(_ handler: @escaping @Sendable (CameraPreviewState) -> Void) {
+        sessionQueue.async { [weak self] in self?.stateHandler = handler }
+    }
+
+    func retry() {
+        sessionQueue.async { [weak self] in
+            guard let self, let cameraID = self.desiredCameraID else { return }
+            self.releaseCaptureGraph(clearDeviceObservation: false)
+            self.configureAndStart(cameraID: cameraID)
+        }
+    }
+
+    private func publish(_ state: CameraPreviewState) { stateHandler?(state) }
+
+    init() {
+        sessionQueue.async { [weak self] in self?.setupSessionNotifications() }
+    }
+
+    private func setupSessionNotifications() {
         observerBox.runtimeError = NotificationCenter.default.addObserver(
             forName: AVCaptureSession.runtimeErrorNotification,
             object: session,
@@ -48,7 +87,12 @@ final class CameraPreviewController: @unchecked Sendable {
         ) { [weak self] notification in
             let error = notification.userInfo?[AVCaptureSessionErrorKey] as? Error
             print("[Preview] Capture runtime error: \(error?.localizedDescription ?? "unknown")")
-            self?.restartAfterInterruption()
+            let message = error?.localizedDescription ?? "Unknown capture error"
+            self?.sessionQueue.async { [weak self] in
+                guard let self, self.hasConsumers else { return }
+                self.releaseCaptureGraph(clearDeviceObservation: false)
+                self.publish(.failed(message))
+            }
         }
 
         observerBox.interrupted = NotificationCenter.default.addObserver(
@@ -59,67 +103,61 @@ final class CameraPreviewController: @unchecked Sendable {
             print("[Preview] Capture interrupted")
             self?.yieldAfterInterruption()
         }
-    }
-
-    /// Registers or updates one visible preview surface.
-    func attach(_ consumerID: UUID, cameraID: String) {
-        stateLock.lock()
-        consumers[consumerID] = cameraID
-        pendingStop?.cancel()
-        pendingStop = nil
-        stateLock.unlock()
-
-        sessionQueue.async { [weak self] in
-            self?.configureAndStart(cameraID: cameraID)
+        observerBox.interruptionEnded = NotificationCenter.default.addObserver(
+            forName: AVCaptureSession.interruptionEndedNotification,
+            object: session, queue: nil
+        ) { [weak self] _ in
+            self?.restartAfterInterruption()
         }
     }
 
-    /// Detaches a surface. The delayed stop absorbs rapid menu-popover
-    /// close/reopen cycles without tearing down the camera graph each time.
-    func detach(_ consumerID: UUID, immediately: Bool = false) {
-        stateLock.lock()
-        consumers.removeValue(forKey: consumerID)
-        let remainingCameraID = consumers.values.first
+    func attach(_ consumerID: UUID, cameraID: String) {
+        sessionQueue.async { [weak self] in
+            guard let self else { return }
+            self.consumers[consumerID] = cameraID
+            self.pendingStop?.cancel()
+            self.pendingStop = nil
+            self.configureAndStart(cameraID: cameraID)
+        }
+    }
 
-        if let remainingCameraID {
-            stateLock.unlock()
-            sessionQueue.async { [weak self] in
-                self?.configureAndStart(cameraID: remainingCameraID)
+    func detach(_ consumerID: UUID, immediately: Bool) {
+        sessionQueue.async { [weak self] in
+            guard let self else { return }
+            self.consumers.removeValue(forKey: consumerID)
+            self.pendingStop?.cancel()
+            if let cameraID = self.desiredCameraID {
+                self.configureAndStart(cameraID: cameraID)
+                return
             }
+            let work = DispatchWorkItem { [weak self] in
+                guard let self, !self.hasConsumers else { return }
+                self.releaseCaptureGraph(clearDeviceObservation: true)
+                self.publish(.idle)
+            }
+            self.pendingStop = work
+            if immediately {
+                work.perform()
+            } else {
+                self.sessionQueue.asyncAfter(deadline: .now() + 1, execute: work)
+            }
+        }
+    }
+
+    private var hasConsumers: Bool { !consumers.isEmpty }
+    private var desiredCameraID: String? { consumers.values.first }
+
+    private func configureAndStart(cameraID: String) {
+        guard hasConsumers, consumers.values.contains(cameraID) else { return }
+        guard AVCaptureDevice.authorizationStatus(for: .video) == .authorized else {
+            releaseCaptureGraph(clearDeviceObservation: true)
+            publish(.denied)
             return
         }
 
-        pendingStop?.cancel()
-        let workItem = DispatchWorkItem { [weak self] in
-            guard let self, !self.hasConsumers else { return }
-            self.releaseCaptureGraph(clearDeviceObservation: true)
-        }
-        pendingStop = workItem
-        stateLock.unlock()
-
-        if immediately {
-            sessionQueue.async(execute: workItem)
-        } else {
-            sessionQueue.asyncAfter(deadline: .now() + 1.0, execute: workItem)
-        }
-    }
-
-    private var hasConsumers: Bool {
-        stateLock.lock()
-        defer { stateLock.unlock() }
-        return !consumers.isEmpty
-    }
-
-    private var desiredCameraID: String? {
-        stateLock.lock()
-        defer { stateLock.unlock() }
-        return consumers.values.first
-    }
-
-    private func configureAndStart(cameraID: String) {
         guard let device = AVCaptureDevice(uniqueID: cameraID) else {
             releaseCaptureGraph(clearDeviceObservation: true)
-            print("[Preview] Could not find camera \(cameraID)")
+            publish(.failed("Camera is no longer connected."))
             return
         }
 
@@ -129,10 +167,11 @@ final class CameraPreviewController: @unchecked Sendable {
         // FaceTime, OBS, or any other application using the camera.
         guard !device.isInUseByAnotherApplication else {
             releaseCaptureGraph(clearDeviceObservation: false)
-            print("[Preview] Camera is in use by another application; yielding preview")
+            publish(.busy)
             return
         }
 
+        if configuredDeviceID != cameraID || !session.isRunning { publish(.starting) }
         if configuredDeviceID != cameraID {
             session.beginConfiguration()
             session.inputs.forEach { session.removeInput($0) }
@@ -141,7 +180,7 @@ final class CameraPreviewController: @unchecked Sendable {
                   session.canAddInput(input) else {
                 session.commitConfiguration()
                 configuredDeviceID = nil
-                print("[Preview] Could not configure camera \(cameraID)")
+                publish(.failed("Could not configure the camera. Try again or reconnect it."))
                 return
             }
 
@@ -152,6 +191,13 @@ final class CameraPreviewController: @unchecked Sendable {
 
         if hasConsumers, !session.isRunning {
             session.startRunning()
+        }
+        if session.isRunning {
+            publish(.running)
+        } else if session.isInterrupted {
+            publish(.interrupted)
+        } else {
+            publish(.failed("Camera preview could not start."))
         }
     }
 
@@ -173,12 +219,30 @@ final class CameraPreviewController: @unchecked Sendable {
     }
 
     private func externalUsageChanged(cameraID: String, isInUse: Bool) {
-        guard observedDevice?.uniqueID == cameraID else { return }
+        guard desiredCameraID == cameraID else { return }
 
         if isInUse {
+            print("[Preview] Camera became busy in another app; stopping preview")
             releaseCaptureGraph(clearDeviceObservation: false)
-        } else if let desiredCameraID {
-            configureAndStart(cameraID: desiredCameraID)
+            publish(.busy)
+        } else if hasConsumers {
+            print("[Preview] Camera became free; restarting preview")
+            configureAndStart(cameraID: cameraID)
+        }
+    }
+
+    private func restartAfterInterruption() {
+        sessionQueue.async { [weak self] in
+            guard let self, let cameraID = self.desiredCameraID else { return }
+            self.configureAndStart(cameraID: cameraID)
+        }
+    }
+
+    private func yieldAfterInterruption() {
+        sessionQueue.async { [weak self] in
+            guard let self else { return }
+            guard self.hasConsumers else { return }
+            self.publish(.interrupted)
         }
     }
 
@@ -186,10 +250,6 @@ final class CameraPreviewController: @unchecked Sendable {
         if session.isRunning {
             session.stopRunning()
         }
-
-        // stopRunning() alone keeps the AVCaptureDeviceInput (and therefore
-        // the UVC device) retained. Removing every input releases the camera
-        // for the higher-priority conferencing application.
         session.beginConfiguration()
         session.inputs.forEach { session.removeInput($0) }
         session.commitConfiguration()
@@ -200,22 +260,11 @@ final class CameraPreviewController: @unchecked Sendable {
             observedDevice = nil
         }
     }
-
-    private func restartAfterInterruption() {
-        sessionQueue.asyncAfter(deadline: .now() + 0.25) { [weak self] in
-            guard let self, let cameraID = self.desiredCameraID else { return }
-            self.configureAndStart(cameraID: cameraID)
-        }
-    }
-
-    private func yieldAfterInterruption() {
-        sessionQueue.async { [weak self] in
-            self?.releaseCaptureGraph(clearDeviceObservation: false)
-        }
-    }
 }
 
-private final class PreviewNotificationObserverBox: @unchecked Sendable {
+// MARK: - Observer Box
+
+private final class PreviewObserverBox: @unchecked Sendable {
     var interrupted: NSObjectProtocol?
     var interruptionEnded: NSObjectProtocol?
     var runtimeError: NSObjectProtocol?
@@ -227,8 +276,44 @@ private final class PreviewNotificationObserverBox: @unchecked Sendable {
     }
 }
 
+/// Shared session surface with explicit permission, availability and error states.
+struct CameraPreviewView: View {
+    @Environment(CameraPreviewController.self) private var controller
+    let cameraID: String?
+    var releaseImmediatelyWhenRemoved: Bool = false
+
+    var body: some View {
+        ZStack {
+            CameraPreviewSurface(cameraID: cameraID,
+                                 releaseImmediatelyWhenRemoved: releaseImmediatelyWhenRemoved)
+            if let message = controller.state.message {
+                VStack(spacing: 10) {
+                    if controller.state == .starting {
+                        ProgressView().controlSize(.small)
+                    }
+                    Text(message).multilineTextAlignment(.center)
+                    if controller.state == .denied {
+                        Button("Open System Settings") {
+                            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera") {
+                                NSWorkspace.shared.open(url)
+                            }
+                        }
+                    } else if controller.state != .starting && controller.state != .idle {
+                        Button("Retry Preview") { controller.retry() }
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.white)
+                .padding()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(.black.opacity(0.8))
+            }
+        }
+    }
+}
+
 /// Live video preview for a selected camera using the shared capture session.
-struct CameraPreviewView: NSViewRepresentable {
+private struct CameraPreviewSurface: NSViewRepresentable {
     @Environment(CameraPreviewController.self) private var previewController
     let cameraID: String?
     let releaseImmediatelyWhenRemoved: Bool
@@ -335,12 +420,7 @@ final class CameraPreviewNSView: NSView {
             )
             NotificationCenter.default.removeObserver(
                 self,
-                name: NSWindow.didBecomeKeyNotification,
-                object: observedWindow
-            )
-            NotificationCenter.default.removeObserver(
-                self,
-                name: NSWindow.didResignKeyNotification,
+                name: NSWindow.didChangeOcclusionStateNotification,
                 object: observedWindow
             )
         }
@@ -373,14 +453,8 @@ final class CameraPreviewNSView: NSView {
         )
         NotificationCenter.default.addObserver(
             self,
-            selector: #selector(windowDidBecomeKey),
-            name: NSWindow.didBecomeKeyNotification,
-            object: newWindow
-        )
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(windowDidResignKey),
-            name: NSWindow.didResignKeyNotification,
+            selector: #selector(windowDidChangeOcclusionState),
+            name: NSWindow.didChangeOcclusionStateNotification,
             object: newWindow
         )
     }
@@ -391,25 +465,13 @@ final class CameraPreviewNSView: NSView {
 
         NotificationCenter.default.addObserver(
             self,
-            selector: #selector(applicationDidBecomeActive),
-            name: NSApplication.didBecomeActiveNotification,
-            object: NSApp
-        )
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(applicationDidResignActive),
-            name: NSApplication.didResignActiveNotification,
-            object: NSApp
-        )
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(applicationDidBecomeActive),
+            selector: #selector(applicationDidUnhide),
             name: NSApplication.didUnhideNotification,
             object: NSApp
         )
         NotificationCenter.default.addObserver(
             self,
-            selector: #selector(applicationDidResignActive),
+            selector: #selector(applicationDidHide),
             name: NSApplication.didHideNotification,
             object: NSApp
         )
@@ -418,16 +480,6 @@ final class CameraPreviewNSView: NSView {
     private func stopObservingApplication() {
         guard isObservingApplication else { return }
         isObservingApplication = false
-        NotificationCenter.default.removeObserver(
-            self,
-            name: NSApplication.didBecomeActiveNotification,
-            object: NSApp
-        )
-        NotificationCenter.default.removeObserver(
-            self,
-            name: NSApplication.didResignActiveNotification,
-            object: NSApp
-        )
         NotificationCenter.default.removeObserver(
             self,
             name: NSApplication.didUnhideNotification,
@@ -444,11 +496,11 @@ final class CameraPreviewNSView: NSView {
         guard let deviceID = currentDeviceID,
               let window,
               !window.isMiniaturized,
-              window.isKeyWindow,
-              !NSApp.isHidden,
-              NSApp.isActive else {
+              window.isVisible,
+              window.occlusionState.contains(.visible),
+              !NSApp.isHidden else {
             let shouldReleaseImmediately = window?.isMiniaturized == true ||
-                window?.isKeyWindow == false || NSApp.isHidden || !NSApp.isActive
+                window?.isVisible == false || NSApp.isHidden
             detachFromSession(immediately: shouldReleaseImmediately)
             return
         }
@@ -480,19 +532,20 @@ final class CameraPreviewNSView: NSView {
         detachFromSession(immediately: true)
     }
 
-    @objc private func windowDidBecomeKey(_ notification: Notification) {
+    @objc private func windowDidChangeOcclusionState(_ notification: Notification) {
+        guard let window = observedWindow else { return }
+        if window.occlusionState.contains(.visible) {
+            updatePresentationState()
+        } else {
+            detachFromSession(immediately: releaseImmediatelyWhenRemoved || !window.isVisible)
+        }
+    }
+
+    @objc private func applicationDidUnhide(_ notification: Notification) {
         updatePresentationState()
     }
 
-    @objc private func windowDidResignKey(_ notification: Notification) {
-        detachFromSession(immediately: true)
-    }
-
-    @objc private func applicationDidBecomeActive(_ notification: Notification) {
-        updatePresentationState()
-    }
-
-    @objc private func applicationDidResignActive(_ notification: Notification) {
+    @objc private func applicationDidHide(_ notification: Notification) {
         detachFromSession(immediately: true)
     }
 }

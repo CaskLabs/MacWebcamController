@@ -10,9 +10,10 @@ final class CameraViewModel {
     var selectedCameraID: String?
     var showingSettings: Bool = false
     /// Tracks the last explicitly selected camera so it can be auto-reselected on reconnect.
-    /// ID may change when plugged into a different port, so we keep the name as a fallback.
+    /// A serial-backed identity permits safe reselection across USB ports.
     private(set) var lastSelectedCameraID: String?
     private(set) var lastSelectedCameraName: String?
+    private(set) var lastSelectedPhysicalCameraID: String?
     var controls: [UVCControl: ControlState] = [:]
     var errorMessage: String?
     var isLoading: Bool = false
@@ -32,18 +33,35 @@ final class CameraViewModel {
     // Presets
     var presets: [CameraPreset] = []
 
-    private let ioQueue = DispatchQueue(label: "com.macwebcamcontroller.uvc", qos: .userInitiated)
+    private let ioQueue: DispatchQueue
 
-    init() {
+    private var loadRequest: CameraLoadRequest?
+    private let persistence: SettingsPersistence
+
+    init(persistence: SettingsPersistence = SettingsPersistence(),
+         ioQueue: DispatchQueue = DispatchQueue(label: "com.macwebcamcontroller.uvc", qos: .userInitiated)) {
+        self.ioQueue = ioQueue
+        self.persistence = persistence
+        let (savedID, savedName, physicalID) = persistence.loadLastSelectedCamera()
+        self.lastSelectedCameraID = savedID
+        self.lastSelectedCameraName = savedName
+        self.lastSelectedPhysicalCameraID = physicalID
         resetControls()
     }
 
     // MARK: - Camera Selection
 
     func selectCamera(_ camera: CameraInfo?) {
+        loadRequest?.cancel()
+        let request = CameraLoadRequest()
+        loadRequest = request
+        isLoading = false
         if let camera {
             lastSelectedCameraID = camera.id
             lastSelectedCameraName = camera.name
+            lastSelectedPhysicalCameraID = camera.uvcDevice?.persistentIdentity
+            persistence.saveLastSelectedCamera(id: camera.id, name: camera.name,
+                                               physicalID: lastSelectedPhysicalCameraID)
         }
         selectedCamera = camera
         selectedCameraID = camera?.id
@@ -56,7 +74,7 @@ final class CameraViewModel {
         focusAutoEnabled = false
         focusAutoSupported = false
 
-        presets = SettingsPersistence().loadPresets(cameraID: camera?.id ?? "")
+        presets = persistence.loadPresets(cameraID: camera?.id ?? "")
 
         guard let camera, let device = camera.uvcDevice else {
             print("[ViewModel] selectCamera: no UVC device for '\(camera?.name ?? "nil")'")
@@ -68,7 +86,7 @@ final class CameraViewModel {
         let cameraID = camera.id
         ioQueue.async { [weak self] in
             guard let self else { return }
-            self.loadControls(from: device, cameraID: cameraID)
+            self.loadControls(from: device, cameraID: cameraID, request: request)
         }
     }
 
@@ -82,13 +100,27 @@ final class CameraViewModel {
 
     /// Reads all control values and ranges from the UVC device (runs on ioQueue).
     nonisolated private func loadControls(
-        from device: UVCDevice,
+        from device: any CameraControlling,
         cameraID: String,
+        request: CameraLoadRequest,
         retryCount: Int = 0
     ) {
         var updated: [UVCControl: ControlState] = [:]
 
+        guard !request.isCancelled else { return }
+        // Probe directly as well: some cameras omit valid descriptor capability bits.
+        let aeMode = try? device.getAutoExposureMode()
+        let aeSupported = device.isAutoExposureSupported || aeMode != nil
+        let aeEnabled = aeMode.map { $0 != 1 } ?? aeSupported
+        let wbMode = try? device.getWhiteBalanceAuto()
+        let wbAutoSupported = device.isWhiteBalanceAutoSupported || wbMode != nil
+        let wbAutoEnabled = wbMode ?? wbAutoSupported
+        let focusMode = try? device.getFocusAuto()
+        let focusAutoSupported = device.isFocusAutoSupported || focusMode != nil
+        let focusAutoEnabled = focusMode ?? focusAutoSupported
+
         for control in UVCControl.allCases {
+            guard !request.isCancelled else { return }
             var state = ControlState()
             state.isSupported = device.isSupported(control)
 
@@ -97,87 +129,59 @@ final class CameraViewModel {
                 continue
             }
 
-            // Try to get minimum first — if this fails the control is truly unsupported.
-            let minimum: Int
+            // Mandatory bounds must be readable; optional metadata has safe fallbacks.
             do {
-                minimum = try device.getValue(for: control, request: .getMinimum)
+                let range = try device.getRange(for: control)
+                state.range = range
+
+                let hardwareCurrent = try device.getValue(for: control)
+                state.currentValue = hardwareCurrent
+                let isAutomatic = control.isManagedAutomatically(
+                    autoExposure: aeEnabled, autoWhiteBalance: wbAutoEnabled,
+                    autoFocus: focusAutoEnabled
+                )
+                guard !request.isCancelled else { return }
+                if let persisted = persistence.load(for: control, cameraID: cameraID),
+                   !isAutomatic {
+                    let target = range.normalized(persisted)
+                    if target != hardwareCurrent {
+                        do {
+                            try device.setValue(target, for: control)
+                            // Some cameras quantize or silently ignore a SET_CUR.
+                            state.currentValue = try device.getValue(for: control)
+                            persistence.save(value: state.currentValue, for: control, cameraID: cameraID)
+                        } catch {
+                            state.currentValue = (try? device.getValue(for: control)) ?? hardwareCurrent
+                            state.error = "Could not restore saved value: \(error.localizedDescription)"
+                        }
+                    }
+                } else if persistence.load(for: control, cameraID: cameraID) == nil, !isAutomatic {
+                    persistence.save(value: hardwareCurrent, for: control, cameraID: cameraID)
+                }
             } catch {
+                print("[UVC] \(control.rawValue) range probe failed: \(error)")
                 state.isSupported = false
-                print("[UVC] \(control.displayName) not supported (GET_MIN failed): \(error)")
-                updated[control] = state
-                continue
             }
 
-            // GET_MAX, GET_RES, GET_DEF — use fallbacks if individual requests fail.
-            let maximum      = (try? device.getValue(for: control, request: .getMaximum)) ?? minimum + 100
-            let resolution   = (try? device.getValue(for: control, request: .getResolution)) ?? 1
-            let defaultValue = (try? device.getValue(for: control, request: .getDefault)) ?? ((minimum + maximum) / 2)
-            let current      = (try? device.getValue(for: control)) ?? defaultValue
-
-            // Degenerate range means the camera responded but doesn't actually
-            // support adjusting this control (e.g. Sony ZV-E10 returns 6/6).
-            if maximum <= minimum {
-                state.isSupported = false
-                print("[UVC] \(control.displayName) degenerate range [\(minimum)…\(maximum)], marking unsupported")
-                updated[control] = state
-                continue
-            }
-
-            state.minimum      = minimum
-            state.maximum      = maximum
-            state.resolution   = max(1, resolution)
-            state.defaultValue = defaultValue
-            state.currentValue = current
-
-            print("[UVC] \(control.displayName): min=\(minimum) max=\(maximum) cur=\(current)")
             updated[control] = state
         }
 
-        // Apply any saved settings on top
-        let persistence = SettingsPersistence()
-        let saved = persistence.loadAll(cameraID: cameraID)
-
-        for (control, savedValue) in saved {
-            if var state = updated[control], state.isSupported {
-                let clamped = max(state.minimum, min(state.maximum, savedValue))
-                if clamped != state.currentValue {
-                    do {
-                        try device.setValue(clamped, for: control)
-                        state.currentValue = clamped
-                        updated[control] = state
-                    } catch {
-                        print("[UVC] Could not restore \(control.displayName): \(error)")
-                    }
-                }
+        // If every single control failed on the first attempt, the camera's USB endpoint
+        // may still be initializing after plug-in. Wait briefly and retry once.
+        let anySupported = updated.values.contains { $0.isSupported }
+        if !anySupported && retryCount == 0 {
+            print("[UVC] All controls failed on first attempt — retrying in 1.5s...")
+            ioQueue.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+                guard !request.isCancelled else { return }
+                self?.loadControls(from: device, cameraID: cameraID, request: request, retryCount: 1)
             }
+            return
         }
 
-        // Read auto-mode state
-        let aeSupported = device.isAutoExposureSupported
-        var aeEnabled = false
-        if aeSupported {
-            aeEnabled = (try? device.getAutoExposureMode()).map { $0 != 1 } ?? false
-        }
-
-        let wbAutoSupported = device.isWhiteBalanceAutoSupported
-        var wbAutoEnabled = false
-        if wbAutoSupported {
-            wbAutoEnabled = (try? device.getWhiteBalanceAuto()) ?? false
-        }
-
-        // Focus Auto is D17 in the Camera Terminal descriptor. Some cameras omit
-        // that capability bit even though selector 0x08 works, so also probe the
-        // control directly before deciding whether to show the Auto Focus toggle.
-        let focusAutoAdvertised = device.isFocusAutoSupported
-        let focusAutoValue = try? device.getFocusAuto()
-        let focusAutoSupported = focusAutoAdvertised || focusAutoValue != nil
-        let focusAutoEnabled = focusAutoValue ?? false
-
-        let finalControls = updated
-        let anySupported = finalControls.values.contains { $0.isSupported }
+        let loadedControls = updated
         Task { @MainActor [weak self] in
-            guard let self, self.selectedCamera?.id == cameraID else { return }
-            self.controls = finalControls
+            guard let self, !request.isCancelled, self.loadRequest === request else { return }
+            self.controls = loadedControls
             self.autoExposureSupported = aeSupported
             self.autoExposureEnabled = aeEnabled
             self.whiteBalanceAutoSupported = wbAutoSupported
@@ -185,59 +189,47 @@ final class CameraViewModel {
             self.focusAutoSupported = focusAutoSupported
             self.focusAutoEnabled = focusAutoEnabled
             self.isLoading = false
-
-            // If every control failed it's almost certainly a timing issue (USB device not
-            // fully enumerated yet). Retry once after 1.5 s — covers different-port plug-ins
-            // where full re-enumeration takes longer than the initial connect delay.
-            if !anySupported, retryCount < 1 {
-                print("[ViewModel] All controls unsupported — retrying after delay (timing issue?)")
-                try? await Task.sleep(nanoseconds: 1_500_000_000)
-                guard self.selectedCamera?.id == cameraID else { return }
-                self.isLoading = true
-                self.ioQueue.async { [weak self] in
-                    self?.loadControls(
-                        from: device,
-                        cameraID: cameraID,
-                        retryCount: retryCount + 1
-                    )
-                }
-            }
         }
     }
 
-    // MARK: - Setting Values
+    // MARK: - Control Modification
 
     func setValue(_ value: Int, for control: UVCControl) {
-        guard let camera = selectedCamera, let device = camera.uvcDevice else { return }
+        guard let camera = selectedCamera,
+              let device = camera.uvcDevice,
+              let state = controls[control],
+              state.isSupported else { return }
+
+        guard !control.isManagedAutomatically(
+            autoExposure: autoExposureEnabled,
+            autoWhiteBalance: whiteBalanceAutoEnabled,
+            autoFocus: focusAutoEnabled
+        ) else { return }
+        let value = state.range.normalized(value)
 
         // Optimistic UI update
         controls[control]?.currentValue = value
-
-        // Capture Sendable values before crossing actor boundary
+        controls[control]?.error = nil
         let cameraID = camera.id
+        let persistence = self.persistence
+        let request = loadRequest
+
         ioQueue.async { [weak self] in
+            guard request?.isCancelled == false else { return }
             do {
                 try device.setValue(value, for: control)
-                print("[UVC] SET_CUR \(control.displayName) = \(value) OK")
-                SettingsPersistence().save(value: value, for: control, cameraID: cameraID)
-                Task { @MainActor [weak self] in
-                    guard let self, self.selectedCamera?.id == cameraID else { return }
-                    self.controls[control]?.error = nil
-                }
+                persistence.save(value: value, for: control, cameraID: cameraID)
             } catch {
-                print("[UVC] SET_CUR \(control.displayName) = \(value) FAILED: \(error)")
+                print("[UVC] setValue failed for \(control.rawValue): \(error)")
 
-                // When a control rejects SET_CUR, re-check whether its auto mode is actually
-                // on — some camera firmware reports auto disabled via GET_CUR but still locks
-                // the control. Detecting this lets us self-correct the toggle state and show
-                // a clear message instead of a raw USB error.
+                // Check whether an automatic mode is locking this control
                 var autoLocked = false
                 switch control {
                 case .whiteBalanceTemperature:
                     if let isAuto = try? device.getWhiteBalanceAuto(), isAuto {
                         autoLocked = true
                         Task { @MainActor [weak self] in
-                            guard let self, self.selectedCamera?.id == cameraID else { return }
+                            guard let self, request?.isCancelled == false, self.selectedCamera?.id == cameraID else { return }
                             self.whiteBalanceAutoEnabled = true
                         }
                     }
@@ -245,7 +237,7 @@ final class CameraViewModel {
                     if let mode = try? device.getAutoExposureMode(), mode != 1 {
                         autoLocked = true
                         Task { @MainActor [weak self] in
-                            guard let self, self.selectedCamera?.id == cameraID else { return }
+                            guard let self, request?.isCancelled == false, self.selectedCamera?.id == cameraID else { return }
                             self.autoExposureEnabled = true
                         }
                     }
@@ -253,7 +245,7 @@ final class CameraViewModel {
                     if let isAuto = try? device.getFocusAuto(), isAuto {
                         autoLocked = true
                         Task { @MainActor [weak self] in
-                            guard let self, self.selectedCamera?.id == cameraID else { return }
+                            guard let self, request?.isCancelled == false, self.selectedCamera?.id == cameraID else { return }
                             self.focusAutoSupported = true
                             self.focusAutoEnabled = true
                         }
@@ -269,18 +261,23 @@ final class CameraViewModel {
                 if let actualValue = try? device.getValue(for: control) {
                     if actualValue == value && !autoLocked {
                         // Camera applied the value despite the USB error (firmware quirk) — treat as success.
-                        SettingsPersistence().save(value: value, for: control, cameraID: cameraID)
+                        persistence.save(value: value, for: control, cameraID: cameraID)
                         Task { @MainActor [weak self] in
-                            guard let self, self.selectedCamera?.id == cameraID else { return }
+                            guard let self, request?.isCancelled == false, self.selectedCamera?.id == cameraID else { return }
                             self.controls[control]?.currentValue = actualValue
                             self.controls[control]?.error = nil
                         }
                     } else {
                         Task { @MainActor [weak self] in
-                            guard let self, self.selectedCamera?.id == cameraID else { return }
+                            guard let self, request?.isCancelled == false, self.selectedCamera?.id == cameraID else { return }
                             self.controls[control]?.currentValue = actualValue
                             self.controls[control]?.error = errorMessage
                         }
+                    }
+                } else {
+                    Task { @MainActor [weak self] in
+                        guard let self, request?.isCancelled == false, self.selectedCamera?.id == cameraID else { return }
+                        self.controls[control]?.error = errorMessage
                     }
                 }
             }
@@ -293,15 +290,16 @@ final class CameraViewModel {
               autoExposureSupported else { return }
         autoExposureEnabled = enabled
         let cameraID = camera.id
+        let request = loadRequest
 
         ioQueue.async { [weak self] in
+            guard request?.isCancelled == false else { return }
             do {
-                // 1 = Manual, 8 = Aperture Priority (most cameras use this for "auto")
-                try device.setAutoExposureMode(enabled ? 8 : 1)
+                try device.setAutoExposure(enabled: enabled)
             } catch {
-                print("[UVC] setAutoExposureMode failed: \(error)")
+                print("[UVC] setAutoExposure failed: \(error)")
                 Task { @MainActor [weak self] in
-                    guard let self, self.selectedCamera?.id == cameraID else { return }
+                    guard let self, request?.isCancelled == false, self.selectedCamera?.id == cameraID else { return }
                     self.autoExposureEnabled = !enabled
                 }
             }
@@ -314,14 +312,16 @@ final class CameraViewModel {
               whiteBalanceAutoSupported else { return }
         whiteBalanceAutoEnabled = enabled
         let cameraID = camera.id
+        let request = loadRequest
 
         ioQueue.async { [weak self] in
+            guard request?.isCancelled == false else { return }
             do {
                 try device.setWhiteBalanceAuto(enabled)
             } catch {
                 print("[UVC] setWhiteBalanceAuto failed: \(error)")
                 Task { @MainActor [weak self] in
-                    guard let self, self.selectedCamera?.id == cameraID else { return }
+                    guard let self, request?.isCancelled == false, self.selectedCamera?.id == cameraID else { return }
                     self.whiteBalanceAutoEnabled = !enabled
                 }
             }
@@ -334,14 +334,16 @@ final class CameraViewModel {
               focusAutoSupported else { return }
         focusAutoEnabled = enabled
         let cameraID = camera.id
+        let request = loadRequest
 
         ioQueue.async { [weak self] in
+            guard request?.isCancelled == false else { return }
             do {
                 try device.setFocusAuto(enabled)
             } catch {
                 print("[UVC] setFocusAuto failed: \(error)")
                 Task { @MainActor [weak self] in
-                    guard let self, self.selectedCamera?.id == cameraID else { return }
+                    guard let self, request?.isCancelled == false, self.selectedCamera?.id == cameraID else { return }
                     self.focusAutoEnabled = !enabled
                 }
             }
@@ -395,7 +397,7 @@ final class CameraViewModel {
             focusAutoEnabled: focusAutoSupported ? focusAutoEnabled : nil
         )
         presets.append(preset)
-        SettingsPersistence().savePresets(presets, cameraID: cameraID)
+        persistence.savePresets(presets, cameraID: cameraID)
     }
 
     func applyPreset(_ preset: CameraPreset) {
@@ -447,12 +449,30 @@ final class CameraViewModel {
         presets[index].autoExposureEnabled = autoExposureSupported ? autoExposureEnabled : nil
         presets[index].whiteBalanceAutoEnabled = whiteBalanceAutoSupported ? whiteBalanceAutoEnabled : nil
         presets[index].focusAutoEnabled = focusAutoSupported ? focusAutoEnabled : nil
-        SettingsPersistence().savePresets(presets, cameraID: cameraID)
+        persistence.savePresets(presets, cameraID: cameraID)
     }
 
     func deletePreset(_ preset: CameraPreset) {
         guard let cameraID = selectedCamera?.id else { return }
         presets.removeAll { $0.id == preset.id }
-        SettingsPersistence().savePresets(presets, cameraID: cameraID)
+        persistence.savePresets(presets, cameraID: cameraID)
+    }
+}
+
+/// Cancellation is read on the USB queue and written by the main actor.
+private final class CameraLoadRequest: @unchecked Sendable {
+    private let lock = NSLock()
+    private var cancelled = false
+
+    var isCancelled: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return cancelled
+    }
+
+    func cancel() {
+        lock.lock()
+        cancelled = true
+        lock.unlock()
     }
 }

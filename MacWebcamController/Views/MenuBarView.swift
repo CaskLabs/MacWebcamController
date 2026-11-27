@@ -4,7 +4,8 @@ import SwiftUI
 struct MenuBarView: View {
     @Environment(CameraManager.self) private var cameraManager
     @Environment(CameraViewModel.self) private var viewModel
-    @Environment(\.openWindow) private var openWindow
+    var openFullControls: () -> Void
+    var openSettings: () -> Void
     @AppStorage("showPreviewInMenuBar") private var showPreviewInMenuBar = false
     @State private var isMenuPreviewActive = false
     // Controls shown in the compact popover
@@ -14,6 +15,26 @@ struct MenuBarView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            if cameraManager.authorizationStatus == .denied || cameraManager.authorizationStatus == .restricted {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.yellow)
+                    Text("Camera access denied.")
+                        .font(.caption)
+                    Spacer()
+                    Button("Settings") {
+                        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera") {
+                            NSWorkspace.shared.open(url)
+                        }
+                    }
+                    .buttonStyle(.borderless)
+                    .font(.caption)
+                    .foregroundStyle(Color.accentColor)
+                }
+                .padding(8)
+                .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+            }
+
             HStack {
                 CameraPickerView()
                 Spacer()
@@ -82,6 +103,11 @@ struct MenuBarView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .center)
             } else if viewModel.selectedCamera != nil {
+                if !viewModel.hasSupportedControls {
+                    Text("Image controls are unavailable for this camera.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 if hasSupportedQuickControls {
                     Divider()
 
@@ -120,9 +146,7 @@ struct MenuBarView: View {
 
             HStack(spacing: 6) {
                 CompactButton(help: "Open full controls window") {
-                    viewModel.showingSettings = false
-                    openWindow(id: "main")
-                    NSApp.activate(ignoringOtherApps: true)
+                    openFullControls()
                 } label: {
                     Text("Open Full Controls")
                 }
@@ -130,9 +154,7 @@ struct MenuBarView: View {
                 Spacer()
 
                 CompactButton(help: "Settings", horizontalPadding: 16) {
-                    viewModel.showingSettings = true
-                    openWindow(id: "main")
-                    NSApp.activate(ignoringOtherApps: true)
+                    openSettings()
                 } label: {
                     Image(systemName: "gear")
                 }
